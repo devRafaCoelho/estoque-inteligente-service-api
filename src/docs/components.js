@@ -209,6 +209,33 @@ module.exports = {
           newPassword: { type: "string", minLength: 8, maxLength: 128 },
         },
       },
+      UserPreferences: {
+        type: "object",
+        properties: {
+          notifyLowStock: { type: "boolean" },
+          notifyOutOfStock: { type: "boolean" },
+          notifyRepurchase: { type: "boolean" },
+          notifyConsumptionNudge: { type: "boolean" },
+          notifyEmailDigest: { type: "boolean" },
+          consumptionNudgeDays: { type: "integer", minimum: 1, maximum: 30 },
+          shoppingListViewMode: { type: "string", enum: ["list", "paper"] },
+          currency: { type: "string" },
+          locale: { type: "string" },
+        },
+      },
+      UpdatePreferencesRequest: {
+        type: "object",
+        minProperties: 1,
+        properties: {
+          notifyLowStock: { type: "boolean" },
+          notifyOutOfStock: { type: "boolean" },
+          notifyRepurchase: { type: "boolean" },
+          notifyConsumptionNudge: { type: "boolean" },
+          notifyEmailDigest: { type: "boolean" },
+          consumptionNudgeDays: { type: "integer", minimum: 1, maximum: 30 },
+          shoppingListViewMode: { type: "string", enum: ["list", "paper"] },
+        },
+      },
       CreateProductRequest: {
         type: "object",
         required: ["name"],

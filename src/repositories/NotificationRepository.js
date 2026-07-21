@@ -97,6 +97,19 @@ const NotificationRepository = {
     );
     return rowCount || 0;
   },
+
+  async findRecentByType(userId, type, days = 5, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM notifications
+       WHERE user_id = $1
+         AND type = $2
+         AND created_at >= NOW() - make_interval(days => $3::int)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId, type, days],
+    );
+    return rows[0] || null;
+  },
 };
 
 module.exports = NotificationRepository;

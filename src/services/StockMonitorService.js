@@ -1,10 +1,12 @@
 const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
 const ProductRepository = require("../repositories/ProductRepository");
 const NotificationRepository = require("../repositories/NotificationRepository");
+const StockMovementRepository = require("../repositories/StockMovementRepository");
 const stockStatus = require("../utils/stockStatus");
 const logger = require("../utils/logger");
 
-const DEDUP_HOURS = 72;
+const STOCK_DEDUP_HOURS = 72;
+const DEFAULT_NUDGE_DAYS = 5;
 
 function formatQty(quantity, unit) {
   const n = Number(quantity);
@@ -12,12 +14,12 @@ function formatQty(quantity, unit) {
   return `${pretty} ${unit || "un"}`;
 }
 
-async function ensureAlert(userId, { type, product, title, body }) {
+async function ensureStockAlert(userId, { type, product, title, body }) {
   const existing = await NotificationRepository.findRecentUnread(
     userId,
     type,
     product.id,
-    DEDUP_HOURS,
+    STOCK_DEDUP_HOURS,
   );
   if (existing) return false;
 
@@ -39,10 +41,47 @@ async function ensureAlert(userId, { type, product, title, body }) {
   return true;
 }
 
+async function ensureConsumptionNudge(userId, prefs) {
+  if (prefs.notify_consumption_nudge === false) return false;
+
+  const days = Number(prefs.consumption_nudge_days) || DEFAULT_NUDGE_DAYS;
+  const recentNudge = await NotificationRepository.findRecentByType(
+    userId,
+    "consumption_nudge",
+    days,
+  );
+  if (recentNudge) return false;
+
+  const outCount = await StockMovementRepository.countOutSinceDays(userId, days);
+  if (outCount > 0) return false;
+
+  const products = await ProductRepository.list(userId, { active: true });
+  const withStock = products.filter((p) => Number(p.quantity) > 0);
+  if (!withStock.length) return false;
+
+  const lastOutAt = await StockMovementRepository.findLastOutAt(userId);
+  const body = lastOutAt
+    ? `Faz ${days} dias sem nenhuma baixa no estoque — quer revisar o que usou?`
+    : `Você ainda não registrou baixas. Quando consumir algo, registre para manter o estoque atualizado.`;
+
+  await NotificationRepository.create({
+    userId,
+    type: "consumption_nudge",
+    title: "Não esqueceu de dar baixa?",
+    body,
+    productId: null,
+    payload: {
+      action: "open_quick_consume",
+      nudgeDays: days,
+      productsWithStock: withStock.length,
+    },
+  });
+  return true;
+}
+
 const StockMonitorService = {
   /**
-   * Avalia estoque baixo/zerado e cria notificações in-app (com deduplicação).
-   * Fase 1: apenas low_stock e out_of_stock.
+   * Avalia estoque baixo/zerado + lembrete genérico de baixa.
    */
   async evaluateUser(userId) {
     let prefs = await UserPreferencesRepository.findByUser(userId);
@@ -58,7 +97,7 @@ const StockMonitorService = {
       const status = stockStatus(product.quantity, product.min_quantity);
 
       if (status === "out" && prefs.notify_out_of_stock !== false) {
-        const ok = await ensureAlert(userId, {
+        const ok = await ensureStockAlert(userId, {
           type: "out_of_stock",
           product,
           title: `${product.name} acabou`,
@@ -66,7 +105,7 @@ const StockMonitorService = {
         });
         if (ok) created += 1;
       } else if (status === "low" && prefs.notify_low_stock !== false) {
-        const ok = await ensureAlert(userId, {
+        const ok = await ensureStockAlert(userId, {
           type: "low_stock",
           product,
           title: `${product.name} está acabando`,
@@ -74,6 +113,10 @@ const StockMonitorService = {
         });
         if (ok) created += 1;
       }
+    }
+
+    if (await ensureConsumptionNudge(userId, prefs)) {
+      created += 1;
     }
 
     if (created > 0) {

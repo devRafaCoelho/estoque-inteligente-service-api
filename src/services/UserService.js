@@ -1,8 +1,10 @@
 const AppError = require("../utils/AppError");
 const UserRepository = require("../repositories/UserRepository");
 const UserAuthIdentityRepository = require("../repositories/UserAuthIdentityRepository");
+const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
 const { hashPassword, comparePassword } = require("../helpers/hashPassword");
 const { UserDto } = require("../dto/v1/userDto");
+const { UserPreferencesDto } = require("../dto/v1/userPreferencesDto");
 
 const UserService = {
   async updateMe(userId, fields) {
@@ -11,6 +13,23 @@ const UserService = {
     const OAuthService = require("./OAuthService");
     const authProviders = await OAuthService.listAuthProviders(userId, updated);
     return UserDto(updated, authProviders);
+  },
+
+  async getPreferences(userId) {
+    let prefs = await UserPreferencesRepository.findByUser(userId);
+    if (!prefs) {
+      await UserPreferencesRepository.createDefaults(userId);
+      prefs = await UserPreferencesRepository.findByUser(userId);
+    }
+    if (!prefs) throw new AppError("Preferências não encontradas", 404);
+    return UserPreferencesDto(prefs);
+  },
+
+  async updatePreferences(userId, fields) {
+    await UserPreferencesRepository.createDefaults(userId);
+    const updated = await UserPreferencesRepository.update(userId, fields);
+    if (!updated) throw new AppError("Preferências não encontradas", 404);
+    return UserPreferencesDto(updated);
   },
 
   async changePassword(userId, { currentPassword, newPassword }) {

@@ -11,4 +11,14 @@ const changePasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).max(128).required(),
 });
 
-module.exports = { updateMeSchema, changePasswordSchema };
+const updatePreferencesSchema = Joi.object({
+  notifyLowStock: Joi.boolean(),
+  notifyOutOfStock: Joi.boolean(),
+  notifyRepurchase: Joi.boolean(),
+  notifyConsumptionNudge: Joi.boolean(),
+  notifyEmailDigest: Joi.boolean(),
+  consumptionNudgeDays: Joi.number().integer().min(1).max(30),
+  shoppingListViewMode: Joi.string().valid("list", "paper"),
+}).min(1);
+
+module.exports = { updateMeSchema, changePasswordSchema, updatePreferencesSchema };

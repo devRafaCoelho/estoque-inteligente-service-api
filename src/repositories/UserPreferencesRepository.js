@@ -28,6 +28,38 @@ const UserPreferencesRepository = {
     );
     return rows[0] || null;
   },
+
+  async update(userId, fields, client = db) {
+    const allowed = {
+      notifyLowStock: "notify_low_stock",
+      notifyOutOfStock: "notify_out_of_stock",
+      notifyRepurchase: "notify_repurchase",
+      notifyConsumptionNudge: "notify_consumption_nudge",
+      notifyEmailDigest: "notify_email_digest",
+      consumptionNudgeDays: "consumption_nudge_days",
+      shoppingListViewMode: "shopping_list_view_mode",
+    };
+    const sets = [];
+    const values = [];
+    let i = 1;
+    for (const [key, column] of Object.entries(allowed)) {
+      if (fields[key] !== undefined) {
+        sets.push(`${column} = $${i++}`);
+        values.push(fields[key]);
+      }
+    }
+    if (!sets.length) return this.findByUser(userId, client);
+    sets.push("updated_at = NOW()");
+    values.push(userId);
+    const { rows } = await client.query(
+      `UPDATE user_preferences
+       SET ${sets.join(", ")}
+       WHERE user_id = $${i}
+       RETURNING *`,
+      values,
+    );
+    return rows[0] || null;
+  },
 };
 
 module.exports = UserPreferencesRepository;

@@ -330,6 +330,58 @@ const paths = {
     },
   },
 
+  "/api/users/me/preferences": {
+    get: {
+      tags: ["Users"],
+      summary: "Preferências de alerta e app",
+      responses: {
+        200: {
+          description: "Preferências",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  preferences: { $ref: "#/components/schemas/UserPreferences" },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+    patch: {
+      tags: ["Users"],
+      summary: "Atualizar preferências (ex.: lembrete de baixa)",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/UpdatePreferencesRequest" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Preferências atualizadas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  preferences: { $ref: "#/components/schemas/UserPreferences" },
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: "#/components/responses/BadRequest" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
   "/api/products": {
     get: {
       tags: ["Products"],

@@ -6,6 +6,16 @@ const UserController = {
     return res.status(200).json({ user });
   },
 
+  async getPreferences(req, res) {
+    const preferences = await UserService.getPreferences(req.user.id);
+    return res.status(200).json({ preferences });
+  },
+
+  async updatePreferences(req, res) {
+    const preferences = await UserService.updatePreferences(req.user.id, req.body);
+    return res.status(200).json({ preferences });
+  },
+
   async changePassword(req, res) {
     const result = await UserService.changePassword(req.user.id, req.body);
     return res.status(200).json(result);

@@ -34,6 +34,30 @@ const StockMovementRepository = {
     );
     return rows;
   },
+
+  async findLastOutAt(userId, client = db) {
+    const { rows } = await client.query(
+      `SELECT created_at
+       FROM stock_movements
+       WHERE user_id = $1 AND type = 'out'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    return rows[0]?.created_at || null;
+  },
+
+  async countOutSinceDays(userId, days, client = db) {
+    const { rows } = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM stock_movements
+       WHERE user_id = $1
+         AND type = 'out'
+         AND created_at >= NOW() - make_interval(days => $2::int)`,
+      [userId, days],
+    );
+    return rows[0]?.count || 0;
+  },
 };
 
 module.exports = StockMovementRepository;
