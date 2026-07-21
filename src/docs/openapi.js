@@ -24,6 +24,8 @@ const openapi = {
     { name: "Products", description: "Estoque e baixas manuais" },
     { name: "Intakes", description: "Entrada de compra (texto → preview → confirm)" },
     { name: "ShoppingLists", description: "Lista de compras (regras + paper)" },
+    { name: "Notifications", description: "Alertas in-app (estoque baixo/zerado)" },
+    { name: "Dashboard", description: "Resumo e métricas" },
   ],
   components,
   security: [{ bearerAuth: [] }],

@@ -316,6 +316,31 @@ module.exports = {
           },
         },
       },
+      Notification: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          type: {
+            type: "string",
+            enum: [
+              "low_stock",
+              "out_of_stock",
+              "repurchase_reminder",
+              "consumption_nudge",
+              "missing_consumption",
+              "intake_ready",
+              "system",
+            ],
+          },
+          title: { type: "string" },
+          body: { type: "string" },
+          productId: { type: "string", format: "uuid", nullable: true },
+          payload: { type: "object" },
+          readAt: { type: "string", format: "date-time", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+          unread: { type: "boolean" },
+        },
+      },
     },
     responses: {
       BadRequest: {

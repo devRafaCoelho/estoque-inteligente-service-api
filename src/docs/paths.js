@@ -867,6 +867,132 @@ const paths = {
       },
     },
   },
+
+  "/api/notifications": {
+    get: {
+      tags: ["Notifications"],
+      summary: "Listar notificações (avalia monitor de estoque antes)",
+      parameters: [
+        {
+          name: "unreadOnly",
+          in: "query",
+          schema: { type: "boolean" },
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", minimum: 1, maximum: 100 },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Lista + contagem de não lidas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  notifications: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/Notification" },
+                  },
+                  unreadCount: { type: "integer" },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/notifications/unread-count": {
+    get: {
+      tags: ["Notifications"],
+      summary: "Contagem de não lidas",
+      responses: {
+        200: {
+          description: "Contagem",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { unreadCount: { type: "integer" } },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/notifications/read-all": {
+    post: {
+      tags: ["Notifications"],
+      summary: "Marcar todas como lidas",
+      responses: {
+        200: { description: "Atualizado" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/notifications/{id}/read": {
+    post: {
+      tags: ["Notifications"],
+      summary: "Marcar notificação como lida",
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      ],
+      responses: {
+        200: { description: "Notificação atualizada" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+        404: { $ref: "#/components/responses/NotFound" },
+      },
+    },
+  },
+
+  "/api/dashboard/stats": {
+    get: {
+      tags: ["Dashboard"],
+      summary: "Cards + alertas recentes + produtos críticos",
+      responses: {
+        200: {
+          description: "Resumo do dashboard",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  stats: {
+                    type: "object",
+                    properties: {
+                      total: { type: "integer" },
+                      ok: { type: "integer" },
+                      low: { type: "integer" },
+                      out: { type: "integer" },
+                      unreadNotifications: { type: "integer" },
+                    },
+                  },
+                  criticalProducts: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/Product" },
+                  },
+                  recentAlerts: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/Notification" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
 };
 
 module.exports = paths;

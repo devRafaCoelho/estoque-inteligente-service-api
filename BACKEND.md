@@ -1004,7 +1004,7 @@ HTTP pode:
 3. **Swagger / OpenAPI** (UI + spec; evoluir junto com as rotas da Fase 1)
 4. `AiParseService` + intake texto + confirm
 5. `StockOutService` + baixa por texto + confirm
-6. Dashboard + notifications básicas + monitor
+6. ~~Dashboard + notifications básicas + monitor~~ ✅
 7. Shopping list por regras
 8. Finance a partir de preços no confirm
 9. `EmailService` (boas-vindas; reset senha na fase 2)

@@ -1,8 +1,9 @@
-const db = require("../config/db");
 const AppError = require("../utils/AppError");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
+const StockMonitorService = require("./StockMonitorService");
 const { ProductListDto, ProductDetailDto } = require("../dto/v1/productDto");
+const db = require("../config/db");
 
 const ProductService = {
   async list(userId, filters) {
@@ -91,6 +92,9 @@ const ProductService = {
         client,
       );
       return ProductListDto(updated);
+    }).then(async (result) => {
+      StockMonitorService.evaluateUserSafe(userId);
+      return result;
     });
   },
 
@@ -124,6 +128,9 @@ const ProductService = {
         client,
       );
       return ProductListDto(updated);
+    }).then(async (result) => {
+      StockMonitorService.evaluateUserSafe(userId);
+      return result;
     });
   },
 };

@@ -6,6 +6,7 @@ const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const { StockOutDetailDto } = require("../dto/v1/stockOutDto");
 const { ProductListDto } = require("../dto/v1/productDto");
+const StockMonitorService = require("./StockMonitorService");
 
 const StockOutConfirmService = {
   async confirm(userId, stockOutId, body) {
@@ -108,6 +109,9 @@ const StockOutConfirmService = {
         stockOut: StockOutDetailDto(confirmed, items),
         products: affectedProducts,
       };
+    }).then((result) => {
+      StockMonitorService.evaluateUserSafe(userId);
+      return result;
     });
   },
 };

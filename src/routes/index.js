@@ -4,6 +4,8 @@ const productRoutes = require("./productRoutes");
 const intakeRoutes = require("./intakeRoutes");
 const stockOutRoutes = require("./stockOutRoutes");
 const shoppingListRoutes = require("./shoppingListRoutes");
+const notificationRoutes = require("./notificationRoutes");
+const dashboardRoutes = require("./dashboardRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -12,6 +14,8 @@ function setRoutes(app) {
   app.use("/api/intakes", intakeRoutes);
   app.use("/api/stock-outs", stockOutRoutes);
   app.use("/api/shopping-lists", shoppingListRoutes);
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/api/dashboard", dashboardRoutes);
 }
 
 module.exports = setRoutes;

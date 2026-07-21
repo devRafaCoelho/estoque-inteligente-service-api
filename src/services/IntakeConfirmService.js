@@ -6,6 +6,7 @@ const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const { IntakeDetailDto } = require("../dto/v1/intakeDto");
 const { ProductListDto } = require("../dto/v1/productDto");
+const StockMonitorService = require("./StockMonitorService");
 
 const IntakeConfirmService = {
   async confirm(userId, intakeId, body) {
@@ -198,6 +199,9 @@ const IntakeConfirmService = {
             }
           : null,
       };
+    }).then((result) => {
+      StockMonitorService.evaluateUserSafe(userId);
+      return result;
     });
   },
 };
