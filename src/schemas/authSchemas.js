@@ -12,4 +12,9 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
-module.exports = { registerSchema, loginSchema };
+const oauthTokenSchema = Joi.object({
+  idToken: Joi.string().required(),
+  fullName: Joi.string().max(150).allow(null, ""),
+});
+
+module.exports = { registerSchema, loginSchema, oauthTokenSchema };

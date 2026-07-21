@@ -4,12 +4,15 @@ const StockMovementRepository = {
   async create(data, client = db) {
     const { rows } = await client.query(
       `INSERT INTO stock_movements
-        (user_id, product_id, type, quantity, unit, quantity_before, quantity_after, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (user_id, product_id, intake_id, stock_out_id, type, quantity, unit,
+         quantity_before, quantity_after, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         data.userId,
         data.productId,
+        data.intakeId ?? null,
+        data.stockOutId ?? null,
         data.type,
         data.quantity,
         data.unit,

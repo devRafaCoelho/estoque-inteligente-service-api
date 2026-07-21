@@ -13,9 +13,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "google-auth-library": "^10.9.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^4.1.0",
+    "openai": "^6.48.0",
     "pg": "^8.13.1",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.17.0"
   }
 }

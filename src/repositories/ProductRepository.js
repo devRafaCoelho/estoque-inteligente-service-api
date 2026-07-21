@@ -123,6 +123,22 @@ const ProductRepository = {
     );
     return rows[0] || null;
   },
+
+  async applyIntake(userId, id, { quantity, avgUnitPrice, unit, category }, client = db) {
+    const { rows } = await client.query(
+      `UPDATE products
+       SET quantity = $1,
+           avg_unit_price = COALESCE($2, avg_unit_price),
+           unit = COALESCE($3, unit),
+           category = COALESCE($4, category),
+           last_purchased_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $5 AND user_id = $6
+       RETURNING *`,
+      [quantity, avgUnitPrice, unit || null, category || null, id, userId],
+    );
+    return rows[0] || null;
+  },
 };
 
 module.exports = ProductRepository;

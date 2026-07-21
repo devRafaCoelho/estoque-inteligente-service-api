@@ -1,0 +1,33 @@
+const { components } = require("./components");
+const paths = require("./paths");
+
+const openapi = {
+  openapi: "3.0.3",
+  info: {
+    title: "Estoque Inteligente API",
+    version: "1.0.0",
+    description:
+      "API v1 — fatia atual: autenticação local + produtos/estoque. " +
+      "Novas rotas da Fase 1 (OAuth, intake, lista, financeiro, etc.) serão " +
+      "acrescentadas nesta spec conforme forem implementadas.",
+  },
+  servers: [
+    {
+      url: "http://localhost:3001",
+      description: "Desenvolvimento local",
+    },
+  ],
+  tags: [
+    { name: "Health", description: "Disponibilidade" },
+    { name: "Auth", description: "Cadastro, login e sessão" },
+    { name: "Users", description: "Perfil e conta" },
+    { name: "Products", description: "Estoque e baixas manuais" },
+    { name: "Intakes", description: "Entrada de compra (texto → preview → confirm)" },
+    { name: "ShoppingLists", description: "Lista de compras (regras + paper)" },
+  ],
+  components,
+  security: [{ bearerAuth: [] }],
+  paths,
+};
+
+module.exports = openapi;

@@ -2,6 +2,7 @@ const db = require("../config/db");
 const AppError = require("../utils/AppError");
 const UserRepository = require("../repositories/UserRepository");
 const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
+const UserAuthIdentityRepository = require("../repositories/UserAuthIdentityRepository");
 const { hashPassword, comparePassword } = require("../helpers/hashPassword");
 const { signToken } = require("../helpers/signToken");
 const { UserDto } = require("../dto/v1/userDto");
@@ -26,10 +27,20 @@ const AuthService = {
         client,
       );
       await UserPreferencesRepository.createDefaults(created.id, client);
+      await UserAuthIdentityRepository.create(
+        {
+          userId: created.id,
+          provider: "local",
+          providerUserId: created.id,
+          email: created.email,
+          emailVerified: false,
+        },
+        client,
+      );
       return created;
     });
 
-    return this.issueSession(user, { isNewUser: true });
+    return this.issueSession(user, { isNewUser: true, authProviders: ["local"] });
   },
 
   async login({ email, password }) {
@@ -38,13 +49,22 @@ const AuthService = {
       throw new AppError("Credenciais inválidas", 401);
     }
 
+    if (!user.password_hash) {
+      throw new AppError(
+        "Esta conta usa login social. Entre com Google ou Apple, ou defina uma senha em Minha conta",
+        401,
+      );
+    }
+
     const ok = await comparePassword(password, user.password_hash);
     if (!ok) {
       throw new AppError("Credenciais inválidas", 401);
     }
 
     await UserRepository.touchLastLogin(user.id);
-    return this.issueSession(user);
+    const OAuthService = require("./OAuthService");
+    const authProviders = await OAuthService.listAuthProviders(user.id, user);
+    return this.issueSession(user, { authProviders });
   },
 
   async me(userId) {
@@ -52,7 +72,8 @@ const AuthService = {
     if (!user || user.status === "deleted") {
       throw new AppError("Usuário não encontrado", 404);
     }
-    const authProviders = user.password_hash ? ["local"] : [];
+    const OAuthService = require("./OAuthService");
+    const authProviders = await OAuthService.listAuthProviders(user.id, user);
     return UserDto(user, authProviders);
   },
 };

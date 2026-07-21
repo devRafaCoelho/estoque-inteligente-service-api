@@ -16,6 +16,7 @@ Documentação da API do Estoque Inteligente. O back-end autentica o usuário, i
 | IA | OpenAI-compatible API (parse, OCR assistido, chat) |
 | Upload | multer + storage local/S3 |
 | Logs | **Winston** (arquivos + console; níveis por env) |
+| Docs da API | **Swagger / OpenAPI** (`swagger-ui-express` + spec; Fase 1) |
 | E-mail | **Nodemailer** (SMTP) — transacional |
 | HTTP externo | axios |
 | HTML parser | cheerio (portais SEFAZ) |
@@ -1000,14 +1001,15 @@ HTTP pode:
 
 1. `config/`, `logger` (Winston), middlewares (`requestLogger`), auth local + **Google + Apple** + users
 2. CRUD `products` + movements manuais (consume) + `last_consumed_at`
-3. `AiParseService` + intake texto + confirm
-4. `StockOutService` + baixa por texto + confirm
-5. Dashboard + notifications básicas + monitor
-6. Shopping list por regras
-7. Finance a partir de preços no confirm
-8. `EmailService` (boas-vindas; reset senha na fase 2)
-9. Foto/OCR + fila
-10. NF QR (UFs prioritárias) + `nf_collector_logs`
-11. Padrões de consumo + `missing_consumption`
-12. Chat com `propose_intake` e `propose_consume`
-13. Digest de e-mail opcional + polish de rate limit
+3. **Swagger / OpenAPI** (UI + spec; evoluir junto com as rotas da Fase 1)
+4. `AiParseService` + intake texto + confirm
+5. `StockOutService` + baixa por texto + confirm
+6. Dashboard + notifications básicas + monitor
+7. Shopping list por regras
+8. Finance a partir de preços no confirm
+9. `EmailService` (boas-vindas; reset senha na fase 2)
+10. Foto/OCR + fila
+11. NF QR (UFs prioritárias) + `nf_collector_logs`
+12. Padrões de consumo + `missing_consumption`
+13. Chat com `propose_intake` e `propose_consume`
+14. Digest de e-mail opcional + polish de rate limit

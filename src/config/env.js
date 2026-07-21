@@ -10,6 +10,16 @@ const schema = Joi.object({
   LOG_LEVEL: Joi.string()
     .valid("error", "warn", "info", "http", "debug")
     .default("info"),
+  GOOGLE_CLIENT_ID: Joi.string().allow("").default(""),
+  APPLE_CLIENT_ID: Joi.string().allow("").default(""),
+  APPLE_TEAM_ID: Joi.string().allow("").default(""),
+  APPLE_KEY_ID: Joi.string().allow("").default(""),
+  // IA — Gemini via endpoint compatível OpenAI (fallback heurístico se vazio)
+  AI_API_KEY: Joi.string().allow("").default(""),
+  AI_BASE_URL: Joi.string()
+    .allow("")
+    .default("https://generativelanguage.googleapis.com/v1beta/openai/"),
+  AI_MODEL: Joi.string().allow("").default("gemini-2.5-flash"),
 }).unknown(true);
 
 const { value, error } = schema.validate(process.env);

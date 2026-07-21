@@ -17,6 +17,17 @@ const UserPreferencesRepository = {
     );
     return rows[0] || null;
   },
+
+  async updateViewMode(userId, viewMode, client = db) {
+    const { rows } = await client.query(
+      `UPDATE user_preferences
+       SET shopping_list_view_mode = $1, updated_at = NOW()
+       WHERE user_id = $2
+       RETURNING *`,
+      [viewMode, userId],
+    );
+    return rows[0] || null;
+  },
 };
 
 module.exports = UserPreferencesRepository;
