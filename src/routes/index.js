@@ -6,6 +6,7 @@ const stockOutRoutes = require("./stockOutRoutes");
 const shoppingListRoutes = require("./shoppingListRoutes");
 const notificationRoutes = require("./notificationRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
+const financeRoutes = require("./financeRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -16,6 +17,7 @@ function setRoutes(app) {
   app.use("/api/shopping-lists", shoppingListRoutes);
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/dashboard", dashboardRoutes);
+  app.use("/api/finance", financeRoutes);
 }
 
 module.exports = setRoutes;

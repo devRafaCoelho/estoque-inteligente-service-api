@@ -7,9 +7,7 @@ const openapi = {
     title: "Estoque Inteligente API",
     version: "1.0.0",
     description:
-      "API v1 — fatia atual: autenticação local + produtos/estoque. " +
-      "Novas rotas da Fase 1 (OAuth, intake, lista, financeiro, etc.) serão " +
-      "acrescentadas nesta spec conforme forem implementadas.",
+      "API v1 — autenticação, estoque, intake/baixa, lista, alertas, dashboard e financeiro.",
   },
   servers: [
     {
@@ -26,6 +24,7 @@ const openapi = {
     { name: "ShoppingLists", description: "Lista de compras (regras + paper)" },
     { name: "Notifications", description: "Alertas in-app (estoque baixo/zerado)" },
     { name: "Dashboard", description: "Resumo e métricas" },
+    { name: "Finance", description: "Gastos a partir de compras com preço" },
   ],
   components,
   security: [{ bearerAuth: [] }],

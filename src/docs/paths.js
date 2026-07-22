@@ -1045,6 +1045,156 @@ const paths = {
       },
     },
   },
+
+  "/api/finance/summary": {
+    get: {
+      tags: ["Finance"],
+      summary: "Resumo de gastos (semana, mês, categorias, recentes)",
+      responses: {
+        200: {
+          description: "Totais e comparativos",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  currency: { type: "string", example: "BRL" },
+                  week: {
+                    type: "object",
+                    properties: {
+                      total: { type: "number" },
+                      count: { type: "integer" },
+                      previousTotal: { type: "number" },
+                      deltaPercent: { type: "number" },
+                      from: { type: "string", format: "date-time" },
+                      to: { type: "string", format: "date-time" },
+                    },
+                  },
+                  month: {
+                    type: "object",
+                    properties: {
+                      total: { type: "number" },
+                      count: { type: "integer" },
+                      previousTotal: { type: "number" },
+                      deltaPercent: { type: "number" },
+                      projectedTotal: { type: "number" },
+                      from: { type: "string", format: "date-time" },
+                      to: { type: "string", format: "date-time" },
+                    },
+                  },
+                  byCategory: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        category: { type: "string" },
+                        total: { type: "number" },
+                        lines: { type: "integer" },
+                      },
+                    },
+                  },
+                  recentPurchases: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", format: "uuid" },
+                        storeName: { type: "string", nullable: true },
+                        purchasedAt: { type: "string", format: "date-time" },
+                        totalAmount: { type: "number" },
+                        currency: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/finance/series": {
+    get: {
+      tags: ["Finance"],
+      summary: "Série temporal de gastos (buckets semanais)",
+      parameters: [
+        {
+          name: "weeks",
+          in: "query",
+          required: false,
+          schema: { type: "integer", minimum: 1, maximum: 26, default: 8 },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Série semanal",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  currency: { type: "string" },
+                  granularity: { type: "string", example: "week" },
+                  series: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        weekStart: { type: "string", format: "date" },
+                        total: { type: "number" },
+                        count: { type: "integer" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/finance/tips": {
+    get: {
+      tags: ["Finance"],
+      summary: "Dicas financeiras simples (regras determinísticas)",
+      responses: {
+        200: {
+          description: "Lista de dicas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  tips: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        severity: {
+                          type: "string",
+                          enum: ["info", "warning", "success"],
+                        },
+                        message: { type: "string" },
+                        category: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
 };
 
 module.exports = paths;
