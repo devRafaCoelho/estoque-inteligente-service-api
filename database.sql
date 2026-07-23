@@ -124,22 +124,33 @@ CREATE TYPE auth_provider AS ENUM (
 
 -- 2.1 users
 CREATE TABLE users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          VARCHAR(150) NOT NULL,
-  email         VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255),              -- NULL para contas só Google/Apple
-  avatar_url    TEXT,
-  status        account_status NOT NULL DEFAULT 'active',
-  default_state CHAR(2),
-  last_login_at TIMESTAMPTZ,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at    TIMESTAMPTZ
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  first_name     VARCHAR(150) NOT NULL,
+  last_name      VARCHAR(150),
+  email          VARCHAR(255) NOT NULL UNIQUE,
+  password_hash  VARCHAR(255),              -- NULL para contas só Google/Apple
+  avatar_url     TEXT,
+  status         account_status NOT NULL DEFAULT 'active',
+  phone          VARCHAR(20),
+  cpf            CHAR(11),
+  zip_code       CHAR(8),
+  street         VARCHAR(255),
+  street_number  VARCHAR(20),
+  complement     VARCHAR(120),
+  neighborhood   VARCHAR(120),
+  city           VARCHAR(120),
+  default_state  CHAR(2),
+  last_login_at  TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at     TIMESTAMPTZ
 );
 
 CREATE INDEX idx_users_status ON users (status);
 CREATE INDEX idx_users_email_active ON users (email)
   WHERE status = 'active';
+CREATE UNIQUE INDEX idx_users_cpf_active ON users (cpf)
+  WHERE cpf IS NOT NULL AND status = 'active';
 
 -- 2.2 user_auth_identities
 CREATE TABLE user_auth_identities (

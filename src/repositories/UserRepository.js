@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { digitsOnly, splitPersonName } = require("../helpers/personName");
 
 const UserRepository = {
   async findByEmail(email, client = db) {
@@ -17,31 +18,70 @@ const UserRepository = {
     return rows[0] || null;
   },
 
-  async create({ name, email, passwordHash, avatarUrl = null, defaultState = null }, client = db) {
+  async create(
+    {
+      firstName,
+      lastName = null,
+      name,
+      email,
+      passwordHash,
+      avatarUrl = null,
+      defaultState = null,
+    },
+    client = db,
+  ) {
+    const resolved = firstName
+      ? { firstName, lastName: lastName || null }
+      : splitPersonName(name);
+
     const { rows } = await client.query(
-      `INSERT INTO users (name, email, password_hash, avatar_url, default_state)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (
+         first_name, last_name, email, password_hash, avatar_url, default_state
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, email, passwordHash, avatarUrl, defaultState],
+      [
+        resolved.firstName,
+        resolved.lastName,
+        email,
+        passwordHash,
+        avatarUrl,
+        defaultState,
+      ],
     );
     return rows[0];
   },
 
   async update(id, fields, client = db) {
     const allowed = {
-      name: "name",
+      firstName: "first_name",
+      lastName: "last_name",
       avatarUrl: "avatar_url",
+      phone: "phone",
+      cpf: "cpf",
+      zipCode: "zip_code",
+      street: "street",
+      streetNumber: "street_number",
+      complement: "complement",
+      neighborhood: "neighborhood",
+      city: "city",
       defaultState: "default_state",
     };
+
+    const digitFields = new Set(["phone", "cpf", "zipCode"]);
     const sets = [];
     const values = [];
     let i = 1;
+
     for (const [key, column] of Object.entries(allowed)) {
-      if (fields[key] !== undefined) {
-        sets.push(`${column} = $${i++}`);
-        values.push(fields[key] === "" ? null : fields[key]);
-      }
+      if (fields[key] === undefined) continue;
+      let value = fields[key];
+      if (value === "") value = null;
+      else if (digitFields.has(key) && value != null) value = digitsOnly(value) || null;
+      sets.push(`${column} = $${i++}`);
+      values.push(value);
     }
+
     if (!sets.length) return this.findById(id, client);
     sets.push("updated_at = NOW()");
     values.push(id);
