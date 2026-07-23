@@ -39,20 +39,21 @@ const PurchaseRepository = {
     }));
   },
 
-  async weeklySeries(userId, weeks = 8, client = db) {
+  async monthlySeries(userId, year, client = db) {
     const { rows } = await client.query(
-      `SELECT date_trunc('week', purchased_at)::date AS week_start,
+      `SELECT EXTRACT(MONTH FROM purchased_at)::int AS month,
               COALESCE(SUM(total_amount), 0)::float AS total,
               COUNT(*)::int AS count
        FROM purchases
        WHERE user_id = $1
-         AND purchased_at >= NOW() - ($2 * INTERVAL '1 week')
+         AND purchased_at >= make_date($2::int, 1, 1)
+         AND purchased_at < make_date($2::int + 1, 1, 1)
        GROUP BY 1
        ORDER BY 1 ASC`,
-      [userId, weeks],
+      [userId, year],
     );
     return rows.map((row) => ({
-      weekStart: row.week_start,
+      month: row.month,
       total: Number(row.total) || 0,
       count: row.count,
     }));

@@ -25,6 +25,7 @@ const openapi = {
     { name: "Notifications", description: "Alertas in-app (estoque baixo/zerado)" },
     { name: "Dashboard", description: "Resumo e métricas" },
     { name: "Finance", description: "Gastos a partir de compras com preço" },
+    { name: "Catalog", description: "Listas de referência (categorias, unidades, UFs)" },
   ],
   components,
   security: [{ bearerAuth: [] }],

@@ -1,6 +1,7 @@
 const { OAuth2Client } = require("google-auth-library");
 const AppError = require("../utils/AppError");
 const env = require("../config/env");
+const logger = require("../utils/logger");
 
 let client;
 
@@ -15,6 +16,21 @@ function getClient() {
 }
 
 const GoogleAuthService = {
+  /** Pré-carrega certificados do Google para a 1ª verificação não pagar o cold start. */
+  async warmUp() {
+    if (!env.GOOGLE_CLIENT_ID) return;
+    try {
+      const oauthClient = getClient();
+      if (typeof oauthClient.getFederatedSignonCertsAsync === "function") {
+        await oauthClient.getFederatedSignonCertsAsync();
+      }
+    } catch (err) {
+      logger.warn("Falha ao aquecer certificados Google (login ainda funciona sob demanda)", {
+        error: err.message,
+      });
+    }
+  },
+
   async verifyIdToken(idToken) {
     try {
       const ticket = await getClient().verifyIdToken({

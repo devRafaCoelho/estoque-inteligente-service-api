@@ -16,6 +16,12 @@ const ProductController = {
     return res.status(201).json({ product });
   },
 
+  async createBatch(req, res) {
+    const result = await ProductService.createBatch(req.user.id, req.body.products);
+    const status = result.createdCount > 0 ? 201 : 400;
+    return res.status(status).json(result);
+  },
+
   async update(req, res) {
     const product = await ProductService.update(req.user.id, req.params.id, req.body);
     return res.status(200).json({ product });

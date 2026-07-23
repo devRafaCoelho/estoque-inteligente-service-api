@@ -24,6 +24,102 @@ const paths = {
     },
   },
 
+  "/api/product-categories": {
+    get: {
+      tags: ["Catalog"],
+      summary: "Listar categorias de produto",
+      security: [],
+      responses: {
+        200: {
+          description: "Categorias ativas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  categories: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code: { type: "string" },
+                        label: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/stock-units": {
+    get: {
+      tags: ["Catalog"],
+      summary: "Listar unidades de medida",
+      security: [],
+      responses: {
+        200: {
+          description: "Unidades ativas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  units: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code: { type: "string" },
+                        label: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/brazilian-states": {
+    get: {
+      tags: ["Catalog"],
+      summary: "Listar UFs brasileiras",
+      security: [],
+      responses: {
+        200: {
+          description: "Estados ativos",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  states: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code: { type: "string" },
+                        name: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
   "/api/auth/register": {
     post: {
       tags: ["Auth"],
@@ -450,6 +546,65 @@ const paths = {
                 type: "object",
                 properties: {
                   product: { $ref: "#/components/schemas/ProductDetail" },
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: "#/components/responses/BadRequest" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
+  "/api/products/batch": {
+    post: {
+      tags: ["Products"],
+      summary: "Criar vários produtos (cadastro manual em lote)",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["products"],
+              properties: {
+                products: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: 50,
+                  items: { $ref: "#/components/schemas/CreateProductRequest" },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: "Pelo menos um produto criado (pode haver erros parciais)",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  created: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/ProductDetail" },
+                  },
+                  errors: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        index: { type: "integer" },
+                        name: { type: "string" },
+                        error: { type: "string" },
+                      },
+                    },
+                  },
+                  createdCount: { type: "integer" },
+                  errorCount: { type: "integer" },
                 },
               },
             },
@@ -1049,27 +1204,16 @@ const paths = {
   "/api/finance/summary": {
     get: {
       tags: ["Finance"],
-      summary: "Resumo de gastos (semana, mês, categorias, recentes)",
+      summary: "Resumo de gastos do mês (categorias, projeção e recentes)",
       responses: {
         200: {
-          description: "Totais e comparativos",
+          description: "Totais e comparativos mensais",
           content: {
             "application/json": {
               schema: {
                 type: "object",
                 properties: {
                   currency: { type: "string", example: "BRL" },
-                  week: {
-                    type: "object",
-                    properties: {
-                      total: { type: "number" },
-                      count: { type: "integer" },
-                      previousTotal: { type: "number" },
-                      deltaPercent: { type: "number" },
-                      from: { type: "string", format: "date-time" },
-                      to: { type: "string", format: "date-time" },
-                    },
-                  },
                   month: {
                     type: "object",
                     properties: {
@@ -1119,31 +1263,35 @@ const paths = {
   "/api/finance/series": {
     get: {
       tags: ["Finance"],
-      summary: "Série temporal de gastos (buckets semanais)",
+      summary: "Série mensal de gastos do ano",
       parameters: [
         {
-          name: "weeks",
+          name: "year",
           in: "query",
           required: false,
-          schema: { type: "integer", minimum: 1, maximum: 26, default: 8 },
+          schema: { type: "integer", example: 2026 },
+          description: "Ano civil (padrão: ano atual). Retorna Jan até o mês corrente.",
         },
       ],
       responses: {
         200: {
-          description: "Série semanal",
+          description: "Série mensal",
           content: {
             "application/json": {
               schema: {
                 type: "object",
                 properties: {
                   currency: { type: "string" },
-                  granularity: { type: "string", example: "week" },
+                  granularity: { type: "string", example: "month" },
+                  year: { type: "integer" },
                   series: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
-                        weekStart: { type: "string", format: "date" },
+                        year: { type: "integer" },
+                        month: { type: "integer" },
+                        label: { type: "string", example: "Jan" },
                         total: { type: "number" },
                         count: { type: "integer" },
                       },

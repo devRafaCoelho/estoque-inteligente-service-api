@@ -47,6 +47,60 @@ const ProductService = {
     return ProductDetailDto(product, []);
   },
 
+  /**
+   * Cria vários produtos. Sucesso parcial: itens inválidos/duplicados
+   * vão em `errors`; os demais em `created`.
+   */
+  async createBatch(userId, products) {
+    const created = [];
+    const errors = [];
+    const seenNames = new Set();
+
+    for (let index = 0; index < products.length; index += 1) {
+      const data = products[index];
+      const nameKey = String(data.name || "")
+        .trim()
+        .toLowerCase();
+
+      if (!nameKey) {
+        errors.push({ index, name: data.name || "", error: "Informe o nome" });
+        continue;
+      }
+
+      if (seenNames.has(nameKey)) {
+        errors.push({
+          index,
+          name: data.name,
+          error: "Nome duplicado nesta lista",
+        });
+        continue;
+      }
+      seenNames.add(nameKey);
+
+      try {
+        const product = await this.create(userId, data);
+        created.push(product);
+      } catch (err) {
+        errors.push({
+          index,
+          name: data.name,
+          error: err.message || "Erro ao criar produto",
+        });
+      }
+    }
+
+    if (created.length) {
+      StockMonitorService.evaluateUserSafe(userId);
+    }
+
+    return {
+      created,
+      errors,
+      createdCount: created.length,
+      errorCount: errors.length,
+    };
+  },
+
   async update(userId, id, fields) {
     const product = await ProductRepository.findById(userId, id);
     if (!product) throw new AppError("Produto não encontrado", 404);

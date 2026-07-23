@@ -6,12 +6,6 @@ function startOfDay(date) {
   return d;
 }
 
-function addDays(date, days) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 function startOfMonth(date) {
   const d = startOfDay(date);
   d.setDate(1);
@@ -23,15 +17,25 @@ function percentDelta(current, previous) {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+const MONTH_LABELS = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
 const FinanceService = {
   async getSummary(userId) {
     const now = new Date();
     const today = startOfDay(now);
-
-    const weekEnd = addDays(today, 1);
-    const weekStart = addDays(today, -6);
-    const prevWeekStart = addDays(weekStart, -7);
-    const prevWeekEnd = weekStart;
 
     const monthStart = startOfMonth(today);
     const monthEndExclusive = new Date(monthStart);
@@ -41,9 +45,7 @@ const FinanceService = {
     prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
     const prevMonthEnd = monthStart;
 
-    const [week, prevWeek, month, prevMonth, byCategory, recent] = await Promise.all([
-      PurchaseRepository.sumTotal(userId, weekStart, weekEnd),
-      PurchaseRepository.sumTotal(userId, prevWeekStart, prevWeekEnd),
+    const [month, prevMonth, byCategory, recent] = await Promise.all([
       PurchaseRepository.sumTotal(userId, monthStart, monthEndExclusive),
       PurchaseRepository.sumTotal(userId, prevMonthStart, prevMonthEnd),
       PurchaseRepository.byCategory(userId, monthStart, monthEndExclusive),
@@ -63,14 +65,6 @@ const FinanceService = {
 
     return {
       currency: "BRL",
-      week: {
-        total: week.total,
-        count: week.count,
-        previousTotal: prevWeek.total,
-        deltaPercent: percentDelta(week.total, prevWeek.total),
-        from: weekStart.toISOString(),
-        to: weekEnd.toISOString(),
-      },
       month: {
         total: month.total,
         count: month.count,
@@ -91,11 +85,31 @@ const FinanceService = {
     };
   },
 
-  async getSeries(userId, { weeks = 8 } = {}) {
-    const series = await PurchaseRepository.weeklySeries(userId, weeks);
+  async getSeries(userId, { year } = {}) {
+    const currentYear = new Date().getFullYear();
+    const targetYear = Number(year) || currentYear;
+    const currentMonth = new Date().getMonth() + 1;
+    const lastMonth = targetYear === currentYear ? currentMonth : 12;
+
+    const rows = await PurchaseRepository.monthlySeries(userId, targetYear);
+    const byMonth = new Map(rows.map((row) => [row.month, row]));
+
+    const series = [];
+    for (let month = 1; month <= lastMonth; month += 1) {
+      const found = byMonth.get(month);
+      series.push({
+        year: targetYear,
+        month,
+        label: MONTH_LABELS[month - 1],
+        total: found?.total || 0,
+        count: found?.count || 0,
+      });
+    }
+
     return {
       currency: "BRL",
-      granularity: "week",
+      granularity: "month",
+      year: targetYear,
       series,
     };
   },
@@ -103,20 +117,6 @@ const FinanceService = {
   async getTips(userId) {
     const summary = await this.getSummary(userId);
     const tips = [];
-
-    if (summary.week.deltaPercent >= 20 && summary.week.previousTotal > 0) {
-      tips.push({
-        id: "week_up",
-        severity: "warning",
-        message: `Você gastou ${summary.week.deltaPercent}% a mais nesta semana do que na anterior.`,
-      });
-    } else if (summary.week.deltaPercent <= -20 && summary.week.total > 0) {
-      tips.push({
-        id: "week_down",
-        severity: "success",
-        message: `Gastos da semana caíram ${Math.abs(summary.week.deltaPercent)}% em relação à anterior.`,
-      });
-    }
 
     if (summary.month.total > 0 && summary.byCategory.length) {
       const top = summary.byCategory[0];
@@ -137,6 +137,12 @@ const FinanceService = {
         severity: "info",
         message:
           "Ainda não há compras com preço neste mês. Informe o preço unitário no preview da entrada para alimentar o financeiro.",
+      });
+    } else if (summary.month.deltaPercent >= 20 && summary.month.previousTotal > 0) {
+      tips.push({
+        id: "month_up",
+        severity: "warning",
+        message: `Você gastou ${summary.month.deltaPercent}% a mais neste mês do que no anterior.`,
       });
     } else if (
       summary.month.projectedTotal > 0 &&

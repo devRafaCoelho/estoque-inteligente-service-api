@@ -485,4 +485,8 @@ CREATE INDEX idx_nf_collector_logs_state ON nf_collector_logs (state_code, creat
 
 -- =============================================================
 -- Fim do script v1
+--
+-- Dados de referência (categorias, unidades, UFs):
+--   psql -d estoque_inteligente -f database_ref_data.sql
+--   → product_categories, stock_units, brazilian_states
 -- =============================================================

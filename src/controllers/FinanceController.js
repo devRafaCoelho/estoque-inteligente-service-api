@@ -7,8 +7,8 @@ const FinanceController = {
   },
 
   async getSeries(req, res) {
-    const weeks = Math.min(Math.max(Number(req.query.weeks) || 8, 1), 26);
-    const result = await FinanceService.getSeries(req.user.id, { weeks });
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const result = await FinanceService.getSeries(req.user.id, { year });
     return res.status(200).json(result);
   },
 

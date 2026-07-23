@@ -49,6 +49,10 @@ const listProductsSchema = Joi.object({
   active: Joi.boolean(),
 });
 
+const createProductsBatchSchema = Joi.object({
+  products: Joi.array().items(createProductSchema).min(1).max(50).required(),
+});
+
 module.exports = {
   CATEGORIES,
   UNITS,
@@ -56,4 +60,5 @@ module.exports = {
   updateProductSchema,
   consumeProductSchema,
   listProductsSchema,
+  createProductsBatchSchema,
 };

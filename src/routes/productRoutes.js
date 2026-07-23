@@ -8,6 +8,7 @@ const {
   updateProductSchema,
   consumeProductSchema,
   listProductsSchema,
+  createProductsBatchSchema,
 } = require("../schemas/productSchemas");
 
 const router = Router();
@@ -16,6 +17,11 @@ router.use(validateAuthentication);
 
 router.get("/", validateSchema(listProductsSchema, "query"), asyncHandler(ProductController.list));
 router.post("/", validateSchema(createProductSchema), asyncHandler(ProductController.create));
+router.post(
+  "/batch",
+  validateSchema(createProductsBatchSchema),
+  asyncHandler(ProductController.createBatch),
+);
 router.get("/:id", asyncHandler(ProductController.get));
 router.patch("/:id", validateSchema(updateProductSchema), asyncHandler(ProductController.update));
 router.post(

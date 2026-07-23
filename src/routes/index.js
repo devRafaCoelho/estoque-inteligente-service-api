@@ -7,6 +7,9 @@ const shoppingListRoutes = require("./shoppingListRoutes");
 const notificationRoutes = require("./notificationRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
 const financeRoutes = require("./financeRoutes");
+const productCategoryRoutes = require("./productCategoryRoutes");
+const stockUnitRoutes = require("./stockUnitRoutes");
+const brazilianStateRoutes = require("./brazilianStateRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -18,6 +21,9 @@ function setRoutes(app) {
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/dashboard", dashboardRoutes);
   app.use("/api/finance", financeRoutes);
+  app.use("/api/product-categories", productCategoryRoutes);
+  app.use("/api/stock-units", stockUnitRoutes);
+  app.use("/api/brazilian-states", brazilianStateRoutes);
 }
 
 module.exports = setRoutes;
