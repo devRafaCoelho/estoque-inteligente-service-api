@@ -26,9 +26,10 @@ contra o PostgreSQL local.
 ## Como rodar
 
 1. Garanta o banco criado e as tabelas aplicadas (rode `database.sql` no
-   banco `estoque_inteligente`).
-2. Configure o `.env` (já vem apontando para `localhost:5432` / `estoque_inteligente`).
-3. Instale e suba:
+   banco `estoque_inteligente` — já inclui categorias, unidades e UFs).
+2. (Opcional) Popule dados de demonstração com `database_seed.sql`.
+3. Configure o `.env` (já vem apontando para `localhost:5432` / `estoque_inteligente`).
+4. Instale e suba:
 
 ```bash
 npm install

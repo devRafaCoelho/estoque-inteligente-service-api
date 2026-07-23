@@ -63,7 +63,7 @@ async function withFallback(label, queryFn, fallback) {
     const rows = await queryFn();
     return rows.length ? rows : fallback;
   } catch (err) {
-    logger.warn(`${label}: usando fallback (execute database_ref_data.sql)`, {
+    logger.warn(`${label}: usando fallback (tabelas de referência ausentes — rode database.sql)`, {
       error: err.message,
     });
     return fallback;
