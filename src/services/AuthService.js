@@ -13,7 +13,7 @@ const AuthService = {
     return { token, user: UserDto(user, authProviders), isNewUser };
   },
 
-  async register({ name, email, password, defaultState }) {
+  async register({ firstName, lastName, name, email, password, defaultState }) {
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
       throw new AppError("E-mail já cadastrado", 409);
@@ -23,7 +23,14 @@ const AuthService = {
 
     const user = await db.withTransaction(async (client) => {
       const created = await UserRepository.create(
-        { name, email, passwordHash, defaultState: defaultState || null },
+        {
+          firstName: firstName || undefined,
+          lastName: lastName || null,
+          name,
+          email,
+          passwordHash,
+          defaultState: defaultState || null,
+        },
         client,
       );
       await UserPreferencesRepository.createDefaults(created.id, client);

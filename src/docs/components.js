@@ -149,9 +149,16 @@ module.exports = {
       ProductDetail,
       RegisterRequest: {
         type: "object",
-        required: ["name", "email", "password"],
+        required: ["email", "password"],
         properties: {
-          name: { type: "string", minLength: 2, maxLength: 150 },
+          firstName: { type: "string", minLength: 2, maxLength: 150 },
+          lastName: { type: "string", minLength: 1, maxLength: 150, nullable: true },
+          name: {
+            type: "string",
+            minLength: 2,
+            maxLength: 150,
+            description: "Legado: nome completo. Preferir firstName + lastName.",
+          },
           email: { type: "string", format: "email" },
           password: { type: "string", minLength: 8, maxLength: 128 },
           defaultState: {
