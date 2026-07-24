@@ -15,7 +15,7 @@ function formatQty(quantity, unit) {
 }
 
 async function ensureStockAlert(userId, { type, product, title, body }) {
-  const existing = await NotificationRepository.findRecentUnread(
+  const existing = await NotificationRepository.findRecentForProduct(
     userId,
     type,
     product.id,

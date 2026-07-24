@@ -38,12 +38,15 @@ const NotificationRepository = {
     return rows[0] || null;
   },
 
-  async findRecentUnread(userId, type, productId, hours = 72, client = db) {
+  /**
+   * Qualquer alerta recente do mesmo tipo/produto (lido ou não).
+   * Evita recriar o mesmo aviso logo após o usuário marcar como lido.
+   */
+  async findRecentForProduct(userId, type, productId, hours = 72, client = db) {
     const { rows } = await client.query(
       `SELECT * FROM notifications
        WHERE user_id = $1
          AND type = $2
-         AND read_at IS NULL
          AND created_at >= NOW() - make_interval(hours => $4::int)
          AND (
            ($3::uuid IS NULL AND product_id IS NULL)
