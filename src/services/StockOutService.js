@@ -49,7 +49,16 @@ const StockOutService = {
     const parsed = await AiParseService.parseConsume(text, { productHints });
 
     return db.withTransaction(async (client) => {
-      const items = await matchConsumeItems(userId, parsed.items, client);
+      const matchedItems = await matchConsumeItems(userId, parsed.items, client);
+      const items = matchedItems.filter((item) => item.productId);
+
+      if (!items.length) {
+        throw new AppError(
+          "Nenhum produto do texto foi encontrado no estoque. Confira os nomes e tente novamente.",
+          422,
+        );
+      }
+
       const stockOut = await StockOutRepository.create(
         {
           userId,
@@ -60,6 +69,8 @@ const StockOutService = {
             parser: parsed.parser || "heuristic",
             action: parsed.action,
             modelItems: parsed.items,
+            matchedCount: items.length,
+            unmatchedCount: matchedItems.length - items.length,
             aiConfigured: AiParseService.isConfigured(),
           },
         },
