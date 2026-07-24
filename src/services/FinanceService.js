@@ -1,4 +1,5 @@
 const PurchaseRepository = require("../repositories/PurchaseRepository");
+const CatalogService = require("./CatalogService");
 
 function startOfDay(date) {
   const d = new Date(date);
@@ -115,17 +116,24 @@ const FinanceService = {
   },
 
   async getTips(userId) {
-    const summary = await this.getSummary(userId);
+    const [summary, catalog] = await Promise.all([
+      this.getSummary(userId),
+      CatalogService.listCategories(),
+    ]);
     const tips = [];
+    const categoryLabels = new Map(
+      (catalog.categories || []).map((item) => [item.code, item.label]),
+    );
 
     if (summary.month.total > 0 && summary.byCategory.length) {
       const top = summary.byCategory[0];
       const share = Math.round((top.total / summary.month.total) * 100);
       if (share >= 30) {
+        const categoryName = categoryLabels.get(top.category) || top.category;
         tips.push({
           id: "category_share",
           severity: "info",
-          message: `A categoria "${top.category}" representa ${share}% dos gastos do mês.`,
+          message: `A categoria "${categoryName}" representa ${share}% dos gastos do mês.`,
           category: top.category,
         });
       }
