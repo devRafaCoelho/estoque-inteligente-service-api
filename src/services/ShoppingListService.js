@@ -6,8 +6,51 @@ const ShoppingListRepository = require("../repositories/ShoppingListRepository")
 const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepository");
 const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
 const { ShoppingListDto, ShoppingListItemDto } = require("../dto/v1/shoppingListDto");
+const { normalizeUnit } = require("./parsers/textIntakeParser");
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+
+function normalizeItemName(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function itemMatchKey(name, unit) {
+  return `${normalizeItemName(name)}::${normalizeUnit(unit) || "un"}`;
+}
+
+function sumSuggestedQty(a, b) {
+  const hasA = a != null && a !== "" && !Number.isNaN(Number(a));
+  const hasB = b != null && b !== "" && !Number.isNaN(Number(b));
+  if (!hasA && !hasB) return null;
+  return (hasA ? Number(a) : 0) + (hasB ? Number(b) : 0);
+}
+
+function preferPriority(a, b) {
+  return PRIORITY_RANK[a] <= PRIORITY_RANK[b] ? a : b;
+}
+
+/** Agrupa itens iguais no próprio lote (nome + unidade). */
+function collapseIncomingItems(items) {
+  const map = new Map();
+  for (const item of items) {
+    const unit = normalizeUnit(item.unit) || item.unit || "un";
+    const key = itemMatchKey(item.name, unit);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...item, unit });
+      continue;
+    }
+    prev.suggestedQty = sumSuggestedQty(prev.suggestedQty, item.suggestedQty);
+    prev.priority = preferPriority(prev.priority || "medium", item.priority || "medium");
+    if (!prev.productId && item.productId) prev.productId = item.productId;
+  }
+  return Array.from(map.values());
+}
 
 function suggestedQtyFor(product, origin) {
   const minQty = Number(product.min_quantity) || 1;
@@ -169,15 +212,61 @@ const ShoppingListService = {
         ];
       }
 
+      toCreate = collapseIncomingItems(toCreate);
+
       if (!toCreate.length || !toCreate[0].name) {
         throw new AppError("Informe o que deseja adicionar à lista", 422);
       }
 
-      const created = await ShoppingListItemRepository.createMany(list.id, toCreate, client);
+      const current = await ShoppingListItemRepository.listByList(list.id, client);
+      const uncheckedByKey = new Map();
+      for (const row of current) {
+        if (row.checked) continue;
+        const key = itemMatchKey(row.name, row.unit);
+        if (!uncheckedByKey.has(key)) uncheckedByKey.set(key, row);
+      }
+
+      const created = [];
+      const updated = [];
+
+      for (const item of toCreate) {
+        const key = itemMatchKey(item.name, item.unit);
+        const existing = uncheckedByKey.get(key);
+        if (existing) {
+          const nextQty = sumSuggestedQty(existing.suggested_qty, item.suggestedQty);
+          const nextPriority = preferPriority(
+            existing.priority || "medium",
+            item.priority || "medium",
+          );
+          const row = await ShoppingListItemRepository.update(
+            existing.id,
+            {
+              suggestedQty: nextQty,
+              priority: nextPriority,
+              ...(item.productId && !existing.product_id
+                ? { productId: item.productId }
+                : {}),
+              unit: normalizeUnit(existing.unit) || existing.unit || item.unit,
+            },
+            client,
+          );
+          updated.push(row);
+          uncheckedByKey.set(key, row);
+        } else {
+          const [row] = await ShoppingListItemRepository.createMany(list.id, [item], client);
+          created.push(row);
+          uncheckedByKey.set(key, row);
+        }
+      }
+
       await ShoppingListRepository.touch(userId, list.id, {}, client);
+      const detail = await loadDetail(userId, client);
       return {
-        items: created.map(ShoppingListItemDto),
-        item: ShoppingListItemDto(created[0]),
+        items: [...updated, ...created].map(ShoppingListItemDto),
+        item: ShoppingListItemDto((created[0] || updated[0])),
+        createdCount: created.length,
+        updatedCount: updated.length,
+        list: detail,
       };
     });
   },
