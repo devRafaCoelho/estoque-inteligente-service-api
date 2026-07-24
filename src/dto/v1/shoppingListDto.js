@@ -11,7 +11,7 @@ const ShoppingListItemDto = (row) => ({
   createdAt: row.created_at,
 });
 
-const ShoppingListDto = (list, items = [], viewMode = "list") => ({
+const ShoppingListDto = (list, items = [], viewMode = "paper") => ({
   id: list.id,
   title: list.title,
   status: list.status,

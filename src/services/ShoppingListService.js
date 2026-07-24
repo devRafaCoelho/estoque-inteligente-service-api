@@ -79,7 +79,7 @@ async function loadDetail(userId, client = db) {
   const list = await ensureActiveList(userId, client);
   const items = await ShoppingListItemRepository.listByList(list.id, client);
   const prefs = await UserPreferencesRepository.findByUser(userId, client);
-  const viewMode = prefs?.shopping_list_view_mode === "paper" ? "paper" : "list";
+  const viewMode = prefs?.shopping_list_view_mode === "list" ? "list" : "paper";
   return ShoppingListDto(list, items, viewMode);
 }
 

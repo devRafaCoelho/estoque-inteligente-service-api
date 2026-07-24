@@ -194,7 +194,7 @@ CREATE TABLE user_preferences (
   consumption_nudge_days      INTEGER NOT NULL DEFAULT 5
     CHECK (consumption_nudge_days BETWEEN 1 AND 30),
   push_enabled                BOOLEAN NOT NULL DEFAULT FALSE,
-  shopping_list_view_mode     VARCHAR(20) NOT NULL DEFAULT 'list',
+  shopping_list_view_mode     VARCHAR(20) NOT NULL DEFAULT 'paper',
     -- list | paper | table (table só faz sentido no client desktop)
   currency                    CHAR(3) NOT NULL DEFAULT 'BRL',
   locale                      VARCHAR(10) NOT NULL DEFAULT 'pt-BR',

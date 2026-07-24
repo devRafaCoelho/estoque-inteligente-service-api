@@ -5,7 +5,7 @@ const UserPreferencesDto = (row) => ({
   notifyConsumptionNudge: row.notify_consumption_nudge !== false,
   notifyEmailDigest: Boolean(row.notify_email_digest),
   consumptionNudgeDays: Number(row.consumption_nudge_days) || 5,
-  shoppingListViewMode: row.shopping_list_view_mode || "list",
+  shoppingListViewMode: row.shopping_list_view_mode || "paper",
   currency: row.currency || "BRL",
   locale: row.locale || "pt-BR",
 });

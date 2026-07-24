@@ -62,7 +62,7 @@ INSERT INTO user_preferences (
 ) VALUES (
   'ebe9bae6-608f-4c36-9d56-b292c8ea6a67',
   TRUE, TRUE, TRUE, TRUE, 5,
-  'list', 'BRL', 'pt-BR'
+  'paper', 'BRL', 'pt-BR'
 )
 ON CONFLICT (user_id) DO UPDATE SET
   notify_low_stock = EXCLUDED.notify_low_stock,
