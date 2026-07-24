@@ -8,6 +8,7 @@ const router = Router();
 router.use(validateAuthentication);
 
 router.get("/summary", asyncHandler(FinanceController.getSummary));
+router.get("/by-category", asyncHandler(FinanceController.getByCategory));
 router.get("/series", asyncHandler(FinanceController.getSeries));
 router.get("/tips", asyncHandler(FinanceController.getTips));
 

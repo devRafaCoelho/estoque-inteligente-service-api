@@ -1239,6 +1239,55 @@ const paths = {
     },
   },
 
+  "/api/finance/by-category": {
+    get: {
+      tags: ["Finance"],
+      summary: "Gastos por categoria em um mês",
+      parameters: [
+        {
+          name: "year",
+          in: "query",
+          schema: { type: "integer", example: 2026 },
+        },
+        {
+          name: "month",
+          in: "query",
+          schema: { type: "integer", minimum: 1, maximum: 12, example: 7 },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Totais por categoria no período",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  currency: { type: "string", example: "BRL" },
+                  year: { type: "integer" },
+                  month: { type: "integer" },
+                  label: { type: "string" },
+                  byCategory: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        category: { type: "string" },
+                        total: { type: "number" },
+                        lines: { type: "integer" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
   "/api/finance/summary": {
     get: {
       tags: ["Finance"],

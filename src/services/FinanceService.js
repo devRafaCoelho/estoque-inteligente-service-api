@@ -34,6 +34,49 @@ const MONTH_LABELS = [
 ];
 
 const FinanceService = {
+  resolveMonthRange(year, month) {
+    const now = new Date();
+    const targetYear = Number(year) || now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    let targetMonth = Number(month) || currentMonth;
+
+    if (
+      !Number.isInteger(targetMonth) ||
+      targetMonth < 1 ||
+      targetMonth > 12 ||
+      (targetYear === now.getFullYear() && targetMonth > currentMonth)
+    ) {
+      targetMonth = currentMonth;
+    }
+
+    const from = new Date(targetYear, targetMonth - 1, 1);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(targetYear, targetMonth, 1);
+    to.setHours(0, 0, 0, 0);
+
+    return {
+      year: targetYear,
+      month: targetMonth,
+      label: MONTH_LABELS[targetMonth - 1],
+      from,
+      to,
+    };
+  },
+
+  async getByCategory(userId, { year, month } = {}) {
+    const range = this.resolveMonthRange(year, month);
+    const byCategory = await PurchaseRepository.byCategory(userId, range.from, range.to);
+    return {
+      currency: "BRL",
+      year: range.year,
+      month: range.month,
+      label: range.label,
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+      byCategory,
+    };
+  },
+
   async getSummary(userId) {
     const now = new Date();
     const today = startOfDay(now);
@@ -115,19 +158,28 @@ const FinanceService = {
     };
   },
 
-  async getTips(userId) {
-    const [summary, catalog] = await Promise.all([
-      this.getSummary(userId),
+  async getTips(userId, { year, month } = {}) {
+    const range = this.resolveMonthRange(year, month);
+    const now = new Date();
+    const isCurrentMonth =
+      range.year === now.getFullYear() && range.month === now.getMonth() + 1;
+
+    const [categoryData, catalog, summary] = await Promise.all([
+      this.getByCategory(userId, { year: range.year, month: range.month }),
       CatalogService.listCategories(),
+      isCurrentMonth ? this.getSummary(userId) : Promise.resolve(null),
     ]);
+
     const tips = [];
     const categoryLabels = new Map(
       (catalog.categories || []).map((item) => [item.code, item.label]),
     );
+    const byCategory = categoryData.byCategory || [];
+    const monthTotal = byCategory.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 
-    if (summary.month.total > 0 && summary.byCategory.length) {
-      const top = summary.byCategory[0];
-      const share = Math.round((top.total / summary.month.total) * 100);
+    if (monthTotal > 0 && byCategory.length) {
+      const top = byCategory[0];
+      const share = Math.round((Number(top.total) / monthTotal) * 100);
       if (share >= 30) {
         const categoryName = categoryLabels.get(top.category) || top.category;
         tips.push({
@@ -139,32 +191,42 @@ const FinanceService = {
       }
     }
 
-    if (summary.month.count === 0) {
+    if (monthTotal <= 0) {
       tips.push({
         id: "no_purchases",
         severity: "info",
         message:
           "Ainda não há compras com preço neste mês. Informe o preço unitário no preview da entrada para alimentar o financeiro.",
       });
-    } else if (summary.month.deltaPercent >= 20 && summary.month.previousTotal > 0) {
-      tips.push({
-        id: "month_up",
-        severity: "warning",
-        message: `Você gastou ${summary.month.deltaPercent}% a mais neste mês do que no anterior.`,
-      });
-    } else if (
-      summary.month.projectedTotal > 0 &&
-      summary.month.previousTotal > 0 &&
-      summary.month.projectedTotal > summary.month.previousTotal * 1.15
-    ) {
-      tips.push({
-        id: "month_projection",
-        severity: "warning",
-        message: `No ritmo atual, o mês pode fechar em torno de R$ ${summary.month.projectedTotal.toFixed(2).replace(".", ",")} (acima do mês passado).`,
-      });
+    } else if (isCurrentMonth && summary) {
+      if (summary.month.deltaPercent >= 20 && summary.month.previousTotal > 0) {
+        const extra = Math.max(
+          0,
+          Number(summary.month.total) - Number(summary.month.previousTotal),
+        );
+        tips.push({
+          id: "month_up",
+          severity: "warning",
+          message: `Você gastou R$ ${extra.toFixed(2).replace(".", ",")} a mais neste mês do que no anterior.`,
+        });
+      } else if (
+        summary.month.projectedTotal > 0 &&
+        summary.month.previousTotal > 0 &&
+        summary.month.projectedTotal > summary.month.previousTotal * 1.15
+      ) {
+        tips.push({
+          id: "month_projection",
+          severity: "warning",
+          message: `No ritmo atual, o mês pode fechar em torno de R$ ${summary.month.projectedTotal.toFixed(2).replace(".", ",")} (acima do mês passado).`,
+        });
+      }
     }
 
-    return { tips };
+    return {
+      tips,
+      year: range.year,
+      month: range.month,
+    };
   },
 };
 
