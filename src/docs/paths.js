@@ -759,6 +759,44 @@ const paths = {
     },
   },
 
+  "/api/intakes": {
+    get: {
+      tags: ["Intakes"],
+      summary: "Listar entradas (ex.: rascunhos)",
+      parameters: [
+        {
+          name: "status",
+          in: "query",
+          schema: { type: "string", enum: ["draft", "confirmed", "cancelled"], default: "draft" },
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Lista de entradas",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  intakes: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/Intake" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+      },
+    },
+  },
+
   "/api/intakes/parse-text": {
     post: {
       tags: ["Intakes"],

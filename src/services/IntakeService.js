@@ -5,7 +5,7 @@ const ProductMatcherService = require("./ProductMatcherService");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockIntakeRepository = require("../repositories/StockIntakeRepository");
 const StockIntakeItemRepository = require("../repositories/StockIntakeItemRepository");
-const { IntakeDetailDto } = require("../dto/v1/intakeDto");
+const { IntakeDetailDto, IntakeSummaryDto } = require("../dto/v1/intakeDto");
 
 async function loadDetail(userId, intakeId, client = db) {
   const intake = await StockIntakeRepository.findById(userId, intakeId, client);
@@ -15,6 +15,18 @@ async function loadDetail(userId, intakeId, client = db) {
 }
 
 const IntakeService = {
+  async list(userId, query = {}) {
+    const status = query.status || "draft";
+    if (!["draft", "confirmed", "cancelled"].includes(status)) {
+      throw new AppError("Status inválido", 400);
+    }
+    const rows = await StockIntakeRepository.listByUser(userId, {
+      status,
+      limit: query.limit,
+    });
+    return rows.map(IntakeSummaryDto);
+  },
+
   async parseNaturalLanguage(userId, text) {
     const products = await ProductRepository.list(userId, { active: true });
     const productHints = products.slice(0, 40).map((p) => p.name);
@@ -94,6 +106,11 @@ const IntakeService = {
     const cancelled = await StockIntakeRepository.updateStatus(userId, intakeId, "cancelled");
     const items = await StockIntakeItemRepository.listByIntake(intakeId);
     return IntakeDetailDto(cancelled, items);
+  },
+
+  async clearDrafts(userId) {
+    const cleared = await StockIntakeRepository.cancelAllByStatus(userId, "draft");
+    return { cleared };
   },
 };
 

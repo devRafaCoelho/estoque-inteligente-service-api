@@ -27,4 +27,15 @@ const IntakeDetailDto = (intake, items = []) => ({
   items: items.map(IntakeItemDto),
 });
 
-module.exports = { IntakeItemDto, IntakeDetailDto };
+const IntakeSummaryDto = (row) => ({
+  id: row.id,
+  source: row.source,
+  status: row.status,
+  rawInput: row.raw_input || null,
+  storeName: row.raw_payload?.storeName || null,
+  itemCount: Number(row.item_count) || 0,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+module.exports = { IntakeItemDto, IntakeDetailDto, IntakeSummaryDto };

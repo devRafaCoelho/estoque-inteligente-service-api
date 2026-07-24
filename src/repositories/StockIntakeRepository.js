@@ -25,6 +25,29 @@ const StockIntakeRepository = {
     return rows[0] || null;
   },
 
+  /**
+   * @param {string} userId
+   * @param {{ status?: string, limit?: number }} [filters]
+   */
+  async listByUser(userId, { status = "draft", limit = 20 } = {}, client = db) {
+    const { rows } = await client.query(
+      `SELECT i.*,
+              COALESCE(c.item_count, 0)::int AS item_count
+       FROM stock_intakes i
+       LEFT JOIN (
+         SELECT intake_id, COUNT(*)::int AS item_count
+         FROM stock_intake_items
+         GROUP BY intake_id
+       ) c ON c.intake_id = i.id
+       WHERE i.user_id = $1
+         AND i.status = $2
+       ORDER BY i.updated_at DESC
+       LIMIT $3`,
+      [userId, status, Math.min(Math.max(Number(limit) || 20, 1), 50)],
+    );
+    return rows;
+  },
+
   async updateStatus(userId, id, status, extra = {}, client = db) {
     const { rows } = await client.query(
       `UPDATE stock_intakes
@@ -37,6 +60,16 @@ const StockIntakeRepository = {
       [status, extra.confirmedAt || null, extra.errorMessage || null, id, userId],
     );
     return rows[0] || null;
+  },
+
+  async cancelAllByStatus(userId, status = "draft", client = db) {
+    const { rowCount } = await client.query(
+      `UPDATE stock_intakes
+       SET status = 'cancelled', updated_at = NOW()
+       WHERE user_id = $1 AND status = $2`,
+      [userId, status],
+    );
+    return rowCount || 0;
   },
 
   async updateRawPayload(userId, id, rawPayload, client = db) {

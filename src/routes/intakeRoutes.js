@@ -13,6 +13,8 @@ const router = Router();
 
 router.use(validateAuthentication);
 
+router.get("/", asyncHandler(IntakeController.list));
+router.post("/clear-drafts", asyncHandler(IntakeController.clearDrafts));
 router.post(
   "/parse-text",
   validateSchema(parseNaturalLanguageSchema),
