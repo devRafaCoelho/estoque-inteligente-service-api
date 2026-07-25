@@ -97,16 +97,74 @@ async function ensureRepurchaseReminder(userId, product) {
   return true;
 }
 
+async function hasRecentConsumptionReminder(userId, days) {
+  const [generic, patterned] = await Promise.all([
+    NotificationRepository.findRecentByType(userId, "consumption_nudge", days),
+    NotificationRepository.findRecentByType(userId, "missing_consumption", days),
+  ]);
+  return Boolean(generic || patterned);
+}
+
+function formatOverdueNames(candidates, limit = 3) {
+  const names = candidates.map((item) => item.name);
+  if (names.length <= limit) {
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} e ${names[1]}`;
+    return `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
+  }
+  const shown = names.slice(0, limit).join(", ");
+  const rest = names.length - limit;
+  return `${shown} e mais ${rest}`;
+}
+
+async function ensureMissingConsumptionNudge(userId, prefs) {
+  if (prefs.notify_consumption_nudge === false) return false;
+
+  const days = Number(prefs.consumption_nudge_days) || DEFAULT_NUDGE_DAYS;
+  if (await hasRecentConsumptionReminder(userId, days)) return false;
+
+  const overdue = await ConsumptionEstimateService.listOverdueCandidates(userId);
+  if (!overdue.length) return false;
+
+  const count = overdue.length;
+  const title =
+    count === 1
+      ? "Baixa em atraso no padrão de uso"
+      : `${count} itens sem baixa no ritmo usual`;
+  const body =
+    count === 1
+      ? `Você costuma registrar baixa em "${overdue[0].name}" com mais frequência — faz ${overdue[0].daysSinceLastOut} dia${overdue[0].daysSinceLastOut === 1 ? "" : "s"} sem movimento.`
+      : `${formatOverdueNames(overdue)} estão além do intervalo usual de consumo. Quer registrar o que usou?`;
+
+  await NotificationRepository.create({
+    userId,
+    type: "missing_consumption",
+    title,
+    body,
+    productId: count === 1 ? overdue[0].productId : null,
+    payload: {
+      action: "open_quick_consume",
+      nudgeDays: days,
+      overdueCount: count,
+      productIds: overdue.map((item) => item.productId),
+      items: overdue.slice(0, 8).map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        daysSinceLastOut: item.daysSinceLastOut,
+        expectedCycleDays: item.expectedCycleDays,
+        avgWeeklyUsage: item.avgWeeklyUsage,
+        unit: item.unit,
+      })),
+    },
+  });
+  return true;
+}
+
 async function ensureConsumptionNudge(userId, prefs) {
   if (prefs.notify_consumption_nudge === false) return false;
 
   const days = Number(prefs.consumption_nudge_days) || DEFAULT_NUDGE_DAYS;
-  const recentNudge = await NotificationRepository.findRecentByType(
-    userId,
-    "consumption_nudge",
-    days,
-  );
-  if (recentNudge) return false;
+  if (await hasRecentConsumptionReminder(userId, days)) return false;
 
   const outCount = await StockMovementRepository.countOutSinceDays(userId, days);
   if (outCount > 0) return false;
@@ -137,7 +195,8 @@ async function ensureConsumptionNudge(userId, prefs) {
 
 const StockMonitorService = {
   /**
-   * Avalia estoque baixo/zerado, recompra por tempo e lembrete genérico de baixa.
+   * Avalia estoque baixo/zerado, recompra por tempo e lembretes de baixa
+   * (padrão de consumo agrupado + genérico).
    */
   async evaluateUser(userId) {
     let prefs = await UserPreferencesRepository.findByUser(userId);
@@ -177,7 +236,9 @@ const StockMonitorService = {
       }
     }
 
-    if (await ensureConsumptionNudge(userId, prefs)) {
+    if (await ensureMissingConsumptionNudge(userId, prefs)) {
+      created += 1;
+    } else if (await ensureConsumptionNudge(userId, prefs)) {
       created += 1;
     }
 
