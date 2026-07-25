@@ -6,12 +6,30 @@ const stockStatus = require("../utils/stockStatus");
 const logger = require("../utils/logger");
 
 const STOCK_DEDUP_HOURS = 72;
+const REPURCHASE_DEDUP_HOURS = 72;
 const DEFAULT_NUDGE_DAYS = 5;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function formatQty(quantity, unit) {
   const n = Number(quantity);
   const pretty = Number.isInteger(n) ? String(n) : String(n);
   return `${pretty} ${unit || "un"}`;
+}
+
+function daysSince(date) {
+  const then = new Date(date).getTime();
+  if (!Number.isFinite(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / MS_PER_DAY));
+}
+
+function isRepurchaseDue(product, now = Date.now()) {
+  const days = Number(product.repurchase_days);
+  if (!Number.isFinite(days) || days < 1 || !product.last_purchased_at) {
+    return false;
+  }
+  const dueAt =
+    new Date(product.last_purchased_at).getTime() + days * MS_PER_DAY;
+  return Number.isFinite(dueAt) && dueAt <= now;
 }
 
 async function ensureStockAlert(userId, { type, product, title, body }) {
@@ -36,6 +54,43 @@ async function ensureStockAlert(userId, { type, product, title, body }) {
       unit: product.unit,
       minQuantity: Number(product.min_quantity),
       stockStatus: type === "out_of_stock" ? "out" : "low",
+    },
+  });
+  return true;
+}
+
+async function ensureRepurchaseReminder(userId, product) {
+  if (!isRepurchaseDue(product)) return false;
+
+  const existing = await NotificationRepository.findRecentForProduct(
+    userId,
+    "repurchase_reminder",
+    product.id,
+    REPURCHASE_DEDUP_HOURS,
+  );
+  if (existing) return false;
+
+  const elapsed = daysSince(product.last_purchased_at);
+  const cycle = Number(product.repurchase_days);
+  const body =
+    elapsed == null
+      ? `Já passou o intervalo de ${cycle} dias para repor "${product.name}".`
+      : `A última vez que você comprou "${product.name}" foi há ${elapsed} dia${elapsed === 1 ? "" : "s"} (ciclo de ${cycle} dias).`;
+
+  await NotificationRepository.create({
+    userId,
+    type: "repurchase_reminder",
+    title: `${product.name}: recompra sugerida`,
+    body,
+    productId: product.id,
+    payload: {
+      action: "open_product",
+      productId: product.id,
+      repurchaseDays: cycle,
+      lastPurchasedAt: product.last_purchased_at,
+      daysSincePurchase: elapsed,
+      quantity: Number(product.quantity),
+      unit: product.unit,
     },
   });
   return true;
@@ -81,7 +136,7 @@ async function ensureConsumptionNudge(userId, prefs) {
 
 const StockMonitorService = {
   /**
-   * Avalia estoque baixo/zerado + lembrete genérico de baixa.
+   * Avalia estoque baixo/zerado, recompra por tempo e lembrete genérico de baixa.
    */
   async evaluateUser(userId) {
     let prefs = await UserPreferencesRepository.findByUser(userId);
@@ -112,6 +167,12 @@ const StockMonitorService = {
           body: `Restam ${formatQty(product.quantity, product.unit)} (mínimo ${formatQty(product.min_quantity, product.unit)}).`,
         });
         if (ok) created += 1;
+      }
+
+      if (prefs.notify_repurchase !== false) {
+        if (await ensureRepurchaseReminder(userId, product)) {
+          created += 1;
+        }
       }
     }
 
