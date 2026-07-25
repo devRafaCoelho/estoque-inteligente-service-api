@@ -2,6 +2,7 @@ const UserPreferencesRepository = require("../repositories/UserPreferencesReposi
 const ProductRepository = require("../repositories/ProductRepository");
 const NotificationRepository = require("../repositories/NotificationRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
+const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 const stockStatus = require("../utils/stockStatus");
 const logger = require("../utils/logger");
 
@@ -197,6 +198,13 @@ const StockMonitorService = {
       });
       return { created: 0, error: err.message };
     }
+  },
+
+  /**
+   * Candidatos atrasados no padrão de consumo (F2-1.3) — usado pelo nudge agrupado (F2-1.4).
+   */
+  listOverdueConsumptionCandidates(userId, options) {
+    return ConsumptionEstimateService.listOverdueCandidates(userId, options);
   },
 };
 

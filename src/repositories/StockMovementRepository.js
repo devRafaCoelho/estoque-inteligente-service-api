@@ -58,6 +58,20 @@ const StockMovementRepository = {
     );
     return rows[0]?.count || 0;
   },
+
+  /**
+   * Baixas (out) do usuário, ordenadas por produto e data — base da estimativa de consumo.
+   */
+  async listOutMovements(userId, client = db) {
+    const { rows } = await client.query(
+      `SELECT product_id, quantity::float AS quantity, created_at
+       FROM stock_movements
+       WHERE user_id = $1 AND type = 'out'
+       ORDER BY product_id ASC, created_at ASC`,
+      [userId],
+    );
+    return rows;
+  },
 };
 
 module.exports = StockMovementRepository;
