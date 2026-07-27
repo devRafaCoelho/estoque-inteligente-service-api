@@ -10,6 +10,7 @@ const financeRoutes = require("./financeRoutes");
 const productCategoryRoutes = require("./productCategoryRoutes");
 const stockUnitRoutes = require("./stockUnitRoutes");
 const brazilianStateRoutes = require("./brazilianStateRoutes");
+const chatRoutes = require("./chatRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -24,6 +25,7 @@ function setRoutes(app) {
   app.use("/api/product-categories", productCategoryRoutes);
   app.use("/api/stock-units", stockUnitRoutes);
   app.use("/api/brazilian-states", brazilianStateRoutes);
+  app.use("/api/chat", chatRoutes);
 }
 
 module.exports = setRoutes;
