@@ -5,6 +5,16 @@ const parseNaturalLanguageSchema = Joi.object({
   text: Joi.string().min(3).max(4000).required(),
 });
 
+const parseNfQrSchema = Joi.object({
+  qrContent: Joi.string().max(4000).allow("", null),
+  accessKey: Joi.string().max(80).allow("", null),
+  stateCode: Joi.string().length(2).uppercase().allow("", null),
+})
+  .or("qrContent", "accessKey")
+  .messages({
+    "object.missing": "Envie qrContent (URL do QR) ou accessKey (chave de 44 dígitos)",
+  });
+
 const intakeItemSchema = Joi.object({
   id: Joi.string().uuid().allow(null),
   productId: Joi.string().uuid().allow(null),
@@ -36,6 +46,7 @@ const confirmIntakeSchema = Joi.object({
 
 module.exports = {
   parseNaturalLanguageSchema,
+  parseNfQrSchema,
   updateIntakeSchema,
   confirmIntakeSchema,
 };

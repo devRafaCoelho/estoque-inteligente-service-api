@@ -26,6 +26,9 @@ const schema = Joi.object({
   // Upload de cupom (parse-image)
   UPLOAD_DIR: Joi.string().default("uploads"),
   UPLOAD_MAX_MB: Joi.number().integer().min(1).max(20).default(8),
+  // NF-e / NFC-e (Sprint 5)
+  NF_PRIORITY_STATES: Joi.string().default("SP,MG"),
+  NF_MOCK_COLLECTOR: Joi.boolean().truthy("true").falsy("false").default(false),
 }).unknown(true);
 
 const { value, error } = schema.validate(process.env);

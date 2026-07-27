@@ -99,6 +99,7 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 |--------|------|-----------|
 | POST | `/api/intakes/parse-text` | Texto → draft de compra (rate limit parse) |
 | POST | `/api/intakes/parse-image` | Multipart `image` → visão/LLM → draft `receipt_photo` com itens |
+| POST | `/api/intakes/parse-nf-qr` | QR/chave → collector UF (SP/MG) → draft `nf_qr` com itens |
 | GET | `/api/intakes` | Listar (ex.: `status=draft`) |
 | POST | `/api/intakes/clear-drafts` | Limpar rascunhos |
 | GET | `/api/intakes/:id` | Preview do draft |
@@ -178,6 +179,19 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 `parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision` e itens no preview. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422** (arquivo removido).
 
+### NF-e / NFC-e (F2-5.2)
+
+`POST /api/intakes/parse-nf-qr` recebe `qrContent` e/ou `accessKey` (+ `stateCode` opcional), valida a chave (44 dígitos + DV), consulta o portal da UF (prioridade `NF_PRIORITY_STATES`, default **SP,MG**), faz matching e cria draft `source: nf_qr`.
+
+- Portal com captcha/bloqueio → **502** (front sugere foto)
+- UF fora da lista → **422**
+- Em dev, `NF_MOCK_COLLECTOR=true` devolve itens fictícios para testar o preview sem SEFAZ
+
+```env
+NF_PRIORITY_STATES=SP,MG
+NF_MOCK_COLLECTOR=false
+```
+
 ## OAuth (Google / Apple)
 
 1. Configure `GOOGLE_CLIENT_ID` / `APPLE_CLIENT_ID` no `.env` da API (mesmo Client ID do front).
@@ -186,4 +200,4 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 ## Fora desta entrega
 
-UI de foto na `/entrada` (F2-4.4), QR NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+Mais UFs no collector NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.

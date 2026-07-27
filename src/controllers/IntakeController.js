@@ -21,6 +21,11 @@ const IntakeController = {
     return res.status(201).json({ intake });
   },
 
+  async parseNfQr(req, res) {
+    const intake = await IntakeService.parseNfQr(req.user.id, req.body);
+    return res.status(201).json({ intake });
+  },
+
   async get(req, res) {
     const intake = await IntakeService.get(req.user.id, req.params.id);
     return res.status(200).json({ intake });

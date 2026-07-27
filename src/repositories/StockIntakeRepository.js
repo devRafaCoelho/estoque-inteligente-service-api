@@ -11,13 +11,14 @@ const StockIntakeRepository = {
       rawPayload = {},
       stateCode = null,
       mediaUrl = null,
+      accessKey = null,
     },
     client = db,
   ) {
     const { rows } = await client.query(
       `INSERT INTO stock_intakes
-         (user_id, source, status, raw_input, raw_payload, state_code, media_url)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+         (user_id, source, status, raw_input, raw_payload, state_code, media_url, access_key)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
        RETURNING *`,
       [
         userId,
@@ -27,6 +28,7 @@ const StockIntakeRepository = {
         JSON.stringify(rawPayload || {}),
         stateCode,
         mediaUrl,
+        accessKey,
       ],
     );
     return rows[0];

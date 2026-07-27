@@ -7,6 +7,7 @@ const aiRateLimit = require("../middlewares/aiRateLimit");
 const uploadReceiptImage = require("../middlewares/uploadReceipt");
 const {
   parseNaturalLanguageSchema,
+  parseNfQrSchema,
   updateIntakeSchema,
   confirmIntakeSchema,
 } = require("../schemas/intakeSchemas");
@@ -28,6 +29,11 @@ router.post(
   aiRateLimit("parse"),
   uploadReceiptImage,
   asyncHandler(IntakeController.parseImage),
+);
+router.post(
+  "/parse-nf-qr",
+  validateSchema(parseNfQrSchema),
+  asyncHandler(IntakeController.parseNfQr),
 );
 router.get("/:id", asyncHandler(IntakeController.get));
 router.patch(

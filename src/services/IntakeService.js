@@ -10,6 +10,8 @@ const StockIntakeItemRepository = require("../repositories/StockIntakeItemReposi
 const { IntakeDetailDto, IntakeSummaryDto } = require("../dto/v1/intakeDto");
 const { assertDraftDocument } = require("../utils/draftDocument");
 const { productHintsFrom } = require("../utils/productHints");
+const { parseNfQrInput } = require("./nf/NfUrlParser");
+const { collectNfItems } = require("./nf/NfCollectorFactory");
 const logger = require("../utils/logger");
 
 async function loadDetail(userId, intakeId, client = db) {
@@ -139,6 +141,95 @@ const IntakeService = {
       safeUnlink(absolutePath);
       throw err;
     }
+  },
+
+  /**
+   * QR / chave NF-e → collector UF → draft `nf_qr` com itens.
+   *
+   * @param {string} userId
+   * @param {{ qrContent?: string, accessKey?: string, stateCode?: string }} body
+   */
+  async parseNfQr(userId, body = {}) {
+    const parsedInput = parseNfQrInput(body);
+    if (!parsedInput.ok) {
+      const messages = {
+        empty: "Envie a URL do QR ou a chave de acesso",
+        notFound: "Não encontrei a chave de 44 dígitos",
+        length: "A chave de acesso precisa ter 44 dígitos",
+        checkDigit: "Chave inválida (dígito verificador não confere)",
+        state: "UF da chave não é reconhecida",
+        model: "Só aceitamos NF-e (55) ou NFC-e (65)",
+      };
+      throw new AppError(messages[parsedInput.reason] || "Payload NF-e inválido", 400, {
+        code: "nf_invalid_payload",
+        reason: parsedInput.reason,
+      });
+    }
+
+    let collected;
+    try {
+      collected = await collectNfItems({
+        accessKey: parsedInput.accessKey,
+        stateCode: parsedInput.stateCode,
+        qrContent: parsedInput.qrContent,
+      });
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      logger.warn("Collector NF-e falhou", { message: err.message });
+      throw new AppError(
+        "Não consegui ler a nota agora. Tente a foto do cupom.",
+        502,
+        { cause: err.message, code: "nf_collector_failed" },
+      );
+    }
+
+    const modelItems = (collected.items || []).map((item, index) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit || "un",
+      category: item.category || "other",
+      unitPrice: item.unitPrice ?? null,
+      confidence: 0.9,
+      sortOrder: item.sortOrder ?? index,
+    }));
+
+    if (!modelItems.length) {
+      throw new AppError(
+        "A nota não retornou itens. Use a foto do cupom.",
+        422,
+        { code: "nf_empty_items" },
+      );
+    }
+
+    return db.withTransaction(async (client) => {
+      const matched = await ProductMatcherService.matchItems(userId, modelItems, client);
+
+      const intake = await StockIntakeRepository.create(
+        {
+          userId,
+          source: "nf_qr",
+          status: "draft",
+          rawInput: parsedInput.qrContent || parsedInput.accessKey,
+          stateCode: parsedInput.stateCode,
+          accessKey: parsedInput.accessKey,
+          rawPayload: {
+            parser: "nf_collector",
+            collector: collected.collector || parsedInput.stateCode,
+            action: "add",
+            storeName: collected.storeName || null,
+            accessKey: parsedInput.accessKey,
+            stateCode: parsedInput.stateCode,
+            model: parsedInput.model,
+            consultaUrl: collected.consultaUrl || null,
+            modelItems,
+          },
+        },
+        client,
+      );
+
+      const items = await StockIntakeItemRepository.createMany(intake.id, matched, client);
+      return IntakeDetailDto(intake, items);
+    });
   },
 
   async get(userId, intakeId) {

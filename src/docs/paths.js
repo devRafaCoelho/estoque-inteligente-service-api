@@ -883,6 +883,61 @@ const paths = {
     },
   },
 
+  "/api/intakes/parse-nf-qr": {
+    post: {
+      tags: ["Intakes"],
+      summary: "QR/chave NF-e → draft de compra (nf_qr)",
+      description:
+        "Valida chave de acesso (44 dígitos), consulta portal da UF prioritária (SP/MG) e cria draft `source: nf_qr` com itens. " +
+        "Captcha/bloqueio SEFAZ → 502 (usar foto). `NF_MOCK_COLLECTOR=true` devolve itens mock em dev.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                qrContent: {
+                  type: "string",
+                  description: "URL completa lida do QR",
+                },
+                accessKey: {
+                  type: "string",
+                  description: "Chave de acesso (44 dígitos)",
+                },
+                stateCode: {
+                  type: "string",
+                  minLength: 2,
+                  maxLength: 2,
+                  description: "UF opcional (ex.: SP)",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: "Draft criado com itens no preview",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  intake: { $ref: "#/components/schemas/Intake" },
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: "#/components/responses/BadRequest" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+        422: { $ref: "#/components/responses/BadRequest" },
+        502: { $ref: "#/components/responses/BadRequest" },
+      },
+    },
+  },
+
   "/api/intakes/{id}": {
     get: {
       tags: ["Intakes"],
