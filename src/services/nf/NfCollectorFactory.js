@@ -39,7 +39,7 @@ async function collectNfItems(input) {
     throw new AppError(
       `Ainda não lemos notas de ${stateCode || "esta UF"}. Por enquanto: ${allowed.join(", ")}. Use a foto do cupom.`,
       422,
-      { code: "nf_uf_unsupported", stateCode, supported: allowed },
+      { code: "nf_uf_unsupported", stateCode, supported: allowed, fallback: "photo" },
     );
   }
 
@@ -48,7 +48,7 @@ async function collectNfItems(input) {
     throw new AppError(
       `UF ${stateCode} ainda sem adapter. Use a foto do cupom.`,
       422,
-      { code: "nf_uf_unsupported", stateCode },
+      { code: "nf_uf_unsupported", stateCode, fallback: "photo" },
     );
   }
 

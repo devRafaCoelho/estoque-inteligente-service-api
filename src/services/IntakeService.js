@@ -10,7 +10,8 @@ const StockIntakeItemRepository = require("../repositories/StockIntakeItemReposi
 const { IntakeDetailDto, IntakeSummaryDto } = require("../dto/v1/intakeDto");
 const { assertDraftDocument } = require("../utils/draftDocument");
 const { productHintsFrom } = require("../utils/productHints");
-const { parseNfQrInput } = require("./nf/NfUrlParser");
+const UserRepository = require("../repositories/UserRepository");
+const { normalizeStateCode, parseNfQrInput } = require("./nf/NfUrlParser");
 const { collectNfItems } = require("./nf/NfCollectorFactory");
 const logger = require("../utils/logger");
 
@@ -166,11 +167,23 @@ const IntakeService = {
       });
     }
 
+    // F2-5.4: chave/URL > body > default_state do usuário (menos passo no fluxo).
+    let stateCode = parsedInput.stateCode || normalizeStateCode(body.stateCode);
+    if (!stateCode) {
+      const user = await UserRepository.findById(userId);
+      stateCode = normalizeStateCode(user?.default_state);
+    }
+    if (!stateCode) {
+      throw new AppError("Defina seu estado (UF) para consultar a nota.", 400, {
+        code: "nf_state_required",
+      });
+    }
+
     let collected;
     try {
       collected = await collectNfItems({
         accessKey: parsedInput.accessKey,
-        stateCode: parsedInput.stateCode,
+        stateCode,
         qrContent: parsedInput.qrContent,
       });
     } catch (err) {
@@ -179,7 +192,7 @@ const IntakeService = {
       throw new AppError(
         "Não consegui ler a nota agora. Tente a foto do cupom.",
         502,
-        { cause: err.message, code: "nf_collector_failed" },
+        { cause: err.message, code: "nf_collector_failed", fallback: "photo" },
       );
     }
 
@@ -197,7 +210,7 @@ const IntakeService = {
       throw new AppError(
         "A nota não retornou itens. Use a foto do cupom.",
         422,
-        { code: "nf_empty_items" },
+        { code: "nf_empty_items", fallback: "photo" },
       );
     }
 
@@ -210,15 +223,15 @@ const IntakeService = {
           source: "nf_qr",
           status: "draft",
           rawInput: parsedInput.qrContent || parsedInput.accessKey,
-          stateCode: parsedInput.stateCode,
+          stateCode,
           accessKey: parsedInput.accessKey,
           rawPayload: {
             parser: "nf_collector",
-            collector: collected.collector || parsedInput.stateCode,
+            collector: collected.collector || stateCode,
             action: "add",
             storeName: collected.storeName || null,
             accessKey: parsedInput.accessKey,
-            stateCode: parsedInput.stateCode,
+            stateCode,
             model: parsedInput.model,
             consultaUrl: collected.consultaUrl || null,
             modelItems,

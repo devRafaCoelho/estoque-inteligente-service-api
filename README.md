@@ -179,18 +179,50 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 `parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision` e itens no preview. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422** (arquivo removido).
 
-### NF-e / NFC-e (F2-5.2)
+### NF-e / NFC-e (Sprint 5)
 
-`POST /api/intakes/parse-nf-qr` recebe `qrContent` e/ou `accessKey` (+ `stateCode` opcional), valida a chave (44 dígitos + DV), consulta o portal da UF (prioridade `NF_PRIORITY_STATES`, default **SP,MG**), faz matching e cria draft `source: nf_qr`.
-
-- Portal com captcha/bloqueio → **502** (front sugere foto)
-- UF fora da lista → **422**
-- Em dev, `NF_MOCK_COLLECTOR=true` devolve itens fictícios para testar o preview sem SEFAZ
+`POST /api/intakes/parse-nf-qr` recebe `qrContent` e/ou `accessKey` (+ `stateCode` opcional), valida a chave (44 dígitos + DV), resolve a UF na ordem **chave/URL → body → `users.default_state`**, consulta o portal da UF, faz matching e cria draft `source: nf_qr`.
 
 ```env
+# Lista de UFs com adapter ativo (ordem não importa para o match).
 NF_PRIORITY_STATES=SP,MG
+# true = devolve itens mock (útil se o portal SEFAZ bloquear/captcha em dev).
 NF_MOCK_COLLECTOR=false
 ```
+
+#### Cobertura por UF (F2-5.5)
+
+| UF | Adapter | Portal de consulta | Status |
+|----|---------|--------------------|--------|
+| **SP** | `SpNfCollector` | `nfce.fazenda.sp.gov.br` (QR `p=chave\|…`) | Suportado |
+| **MG** | `MgNfCollector` | `portalsped.fazenda.mg.gov.br` (NFC-e) | Suportado |
+| Demais | — | — | **Não suportado** → **422** `nf_uf_unsupported` + `fallback: "photo"` |
+
+Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layout/URL do portal mudam por estado) — roadmap em `DOCUMENTACAO.md` (Fase 3).
+
+#### Limitações e expectativa
+
+| Tema | Comportamento real |
+|------|--------------------|
+| Só NFC-e / NF-e no consumidor | Aceitamos modelos **55** (NF-e) e **65** (NFC-e) na chave. Outros modelos → **400**. |
+| Dependência SEFAZ | A API **baixa HTML do portal estadual** e faz parse. Sem API oficial estável; HTML pode mudar sem aviso. |
+| Captcha / bloqueio / Cloudflare | **502** `nf_captcha` ou `nf_fetch_failed` com `fallback: "photo"`. O client deve oferecer foto/OCR (Sprint 4). |
+| Timeout | Consulta HTTP ~20s; falha de rede/timeout → **502** + fallback foto. |
+| Itens ilegíveis | HTML sem tabela de produtos → **422** `nf_empty_items` + fallback foto. |
+| UF da preferência | `default_state` só preenche se a chave/URL **não** trouxer UF. A UF da **chave sempre prevalece** (scan sobrescreve preferência). |
+| UF sem adapter | Mesmo com `default_state=SP`, uma nota cuja chave é de **RJ** retorna **422** (UF da chave). |
+| Mock em dev | `NF_MOCK_COLLECTOR=true` ignora SEFAZ e devolve itens fictícios — **não use em produção**. |
+| Fora do escopo | XML autorizado, download oficial SEFAZ, cobertura nacional, fila assíncrona, cache de chave. |
+
+#### Códigos de erro úteis (client)
+
+| HTTP | `details.code` | O que fazer no app |
+|------|----------------|--------------------|
+| 400 | `nf_invalid_payload` | Pedir novo scan / colar chave |
+| 400 | `nf_state_required` | Pedir UF e salvar `default_state` |
+| 422 | `nf_uf_unsupported` | CTA foto (UF ainda sem adapter) |
+| 422 | `nf_empty_items` | CTA foto |
+| 502 | `nf_captcha` / `nf_fetch_failed` / `nf_collector_failed` | CTA foto; opcional “tentar QR de novo” |
 
 ## OAuth (Google / Apple)
 
@@ -200,4 +232,4 @@ NF_MOCK_COLLECTOR=false
 
 ## Fora desta entrega
 
-Mais UFs no collector NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+Mais UFs no collector NF-e (além de SP/MG — ver tabela de cobertura acima), filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.

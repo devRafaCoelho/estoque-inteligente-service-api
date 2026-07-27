@@ -101,7 +101,19 @@ function extractAccessKeyCandidate(raw) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+function normalizeStateCode(value) {
+  const code = String(value || "")
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : null;
+}
+
+/**
  * Extrai UF/chave/URL a partir do conteúdo do QR ou chave colada.
+ * Prioridade da UF: chave (scan) > body.stateCode (preferência / default_state).
  * @param {{ qrContent?: string, accessKey?: string, stateCode?: string }} body
  */
 function parseNfQrInput(body = {}) {
@@ -121,9 +133,8 @@ function parseNfQrInput(body = {}) {
     qrContent = null;
   }
 
-  const stateCode = String(body.stateCode || parsed.stateCode || "")
-    .trim()
-    .toUpperCase() || parsed.stateCode;
+  // Scan sobrescreve preferência; body.stateCode só preenche lacuna.
+  const stateCode = parsed.stateCode || normalizeStateCode(body.stateCode);
 
   return {
     ok: true,
@@ -141,6 +152,7 @@ function parseNfQrInput(body = {}) {
 module.exports = {
   IBGE_UF_BY_CODE,
   normalizeAccessKeyDigits,
+  normalizeStateCode,
   parseAccessKey,
   extractAccessKeyCandidate,
   parseNfQrInput,

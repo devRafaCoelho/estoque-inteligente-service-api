@@ -27,7 +27,7 @@ async function fetchText(url, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     throw new AppError(
       "Não consegui consultar a nota no portal da SEFAZ. Tente a foto do cupom.",
       502,
-      { cause: err.message, code: "nf_fetch_failed" },
+      { cause: err.message, code: "nf_fetch_failed", fallback: "photo" },
     );
   } finally {
     clearTimeout(timer);
@@ -84,7 +84,7 @@ async function collectFromPortal(input, buildUrl) {
     throw new AppError(
       "O portal da SEFAZ pediu captcha ou bloqueou a consulta. Use a foto do cupom.",
       502,
-      { code: "nf_captcha" },
+      { code: "nf_captcha", fallback: "photo" },
     );
   }
 
@@ -93,7 +93,7 @@ async function collectFromPortal(input, buildUrl) {
     throw new AppError(
       "Consultei a nota, mas não encontrei itens legíveis. Use a foto do cupom.",
       422,
-      { code: "nf_empty_items", consultaUrl: usedUrl },
+      { code: "nf_empty_items", consultaUrl: usedUrl, fallback: "photo" },
     );
   }
 

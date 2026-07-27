@@ -889,6 +889,7 @@ const paths = {
       summary: "QR/chave NF-e → draft de compra (nf_qr)",
       description:
         "Valida chave de acesso (44 dígitos), consulta portal da UF prioritária (SP/MG) e cria draft `source: nf_qr` com itens. " +
+        "UF efetiva: chave/URL > `stateCode` do body > `default_state` do usuário (F2-5.4). Sem UF → 400 `nf_state_required`. " +
         "Captcha/bloqueio SEFAZ → 502 (usar foto). `NF_MOCK_COLLECTOR=true` devolve itens mock em dev.",
       requestBody: {
         required: true,
@@ -909,7 +910,8 @@ const paths = {
                   type: "string",
                   minLength: 2,
                   maxLength: 2,
-                  description: "UF opcional (ex.: SP)",
+                  description:
+                    "UF opcional (ex.: SP). Preferência do usuário (`default_state`) é usada se a chave/URL não trouxer UF.",
                 },
               },
             },
