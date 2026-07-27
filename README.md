@@ -1,8 +1,8 @@
-# Estoque Inteligente — Service API (Fase 1)
+# Estoque Inteligente — Service API
 
-API da Fase 1 do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa por texto (Gemini com fallback heurístico), lista de compras, dashboard, notificações e financeiro simples.
+API do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa por texto (Gemini com fallback heurístico), lista de compras, dashboard, notificações, financeiro e chat com tools (propostas + rate limit).
 
-A arquitetura-alvo completa (Redis, OCR, NF-e, chat, e-mail, etc.) está em [`BACKEND.md`](./BACKEND.md) e no [`DOCUMENTACAO.md`](../DOCUMENTACAO.md) do monorepo — este README descreve **o que a API entrega hoje**.
+A arquitetura-alvo completa (Redis, OCR, NF-e, e-mail, etc.) está em [`BACKEND.md`](./BACKEND.md) e no [`DOCUMENTACAO.md`](../DOCUMENTACAO.md) do monorepo — este README descreve **o que a API entrega hoje**.
 
 ## Stack
 
@@ -15,7 +15,9 @@ A arquitetura-alvo completa (Redis, OCR, NF-e, chat, e-mail, etc.) está em [`BA
 - Winston (logs)
 - Swagger / OpenAPI (`swagger-ui-express`)
 
-> Nesta fatia: `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico.
+> Nesta fatia: `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico. Rate limit de IA é **em memória** (por processo).
+
+Camadas: `routes` → `middlewares` → `controllers` → `services` → `repositories` (+ `schemas` / `dto/v1`). Detalhes em `BACKEND.md`.
 
 ## Como rodar
 
@@ -29,7 +31,7 @@ npm install
 npm start
 ```
 
-A API sobe em `http://localhost:3001`.
+A API sobe em `http://localhost:3001`. Em desenvolvimento: `npm run dev` (watch).
 
 ## Swagger
 
@@ -40,7 +42,7 @@ A API sobe em `http://localhost:3001`.
 
 Na UI, use **Authorize** com o JWT de `/api/auth/login` ou `/api/auth/register` (sem o prefixo `Bearer` — o Swagger adiciona).
 
-A spec vive em `src/docs/` e deve acompanhar as rotas da Fase 1.
+A spec vive em `src/docs/` e deve acompanhar as rotas entregues.
 
 ## Testar
 
@@ -52,7 +54,7 @@ npm run test:api
 
 O script cria usuário, cadastra produtos, registra consumo/baixa e valida status (`ok` / `low` / `out`).
 
-## Endpoints da Fase 1
+## Endpoints entregues
 
 ### Sistema e catálogos
 
@@ -95,7 +97,7 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/intakes/parse-text` | Texto → draft de compra |
+| POST | `/api/intakes/parse-text` | Texto → draft de compra (rate limit parse) |
 | GET | `/api/intakes` | Listar (ex.: `status=draft`) |
 | POST | `/api/intakes/clear-drafts` | Limpar rascunhos |
 | GET | `/api/intakes/:id` | Preview do draft |
@@ -107,7 +109,9 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/stock-outs/parse-text` | Texto → draft de baixa |
+| POST | `/api/stock-outs/parse-text` | Texto → draft de baixa (rate limit parse) |
+| GET | `/api/stock-outs` | Listar (ex.: `status=draft`) |
+| POST | `/api/stock-outs/clear-drafts` | Limpar rascunhos |
 | GET | `/api/stock-outs/:id` | Preview |
 | PATCH | `/api/stock-outs/:id` | Editar itens |
 | POST | `/api/stock-outs/:id/confirm` | Confirmar → desconta estoque |
@@ -118,11 +122,22 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/api/shopping-lists/active` | Lista ativa |
+| GET | `/api/shopping-lists/suggestions-preview` | Prévia de sugestões (UI de gerar) |
 | POST | `/api/shopping-lists/generate` | Regenerar por regras (`mode: rules`) |
 | PATCH | `/api/shopping-lists/view-mode` | Preferência lista/paper |
 | POST | `/api/shopping-lists/items` | Adicionar item (texto livre usa o parse) |
 | PATCH | `/api/shopping-lists/items/:id` | Check / editar |
+| DELETE | `/api/shopping-lists/items` | Limpar todos os itens |
 | DELETE | `/api/shopping-lists/items/:id` | Remover item |
+
+### Chat (assistente)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/chat/session` | Sessão atual + histórico curto |
+| POST | `/api/chat/messages` | Mensagem do usuário (rate limit chat) |
+
+Tools / intenções: `answer`, `propose_stock_out`, `propose_shopping_list`, `finance_tip`. Propostas mutáveis **não** confirmam estoque/lista sozinhas — o client usa CTA de revisão.
 
 ### Dashboard, notificações e financeiro
 
@@ -138,15 +153,21 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 | GET | `/api/finance/series` | Série mensal do ano |
 | GET | `/api/finance/tips` | Dicas do mês selecionado |
 
-## Parse por texto + Gemini
+## Parse por texto + Gemini + rate limit
 
-Com `AI_API_KEY` (Gemini Flash no [AI Studio](https://aistudio.google.com/app/apikey)), entrada, baixa e item de lista em texto livre usam LLM. Sem chave (ou se a IA falhar), cai no **parser heurístico**.
+Com `AI_API_KEY` (Gemini Flash no [AI Studio](https://aistudio.google.com/app/apikey)), entrada, baixa, item de lista em texto livre e chat usam LLM. Sem chave (ou se a IA falhar no parse), cai no **parser heurístico**.
 
 ```env
 AI_API_KEY=sua-chave
 AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 AI_MODEL=gemini-2.5-flash
+
+# Cotas diárias por usuário (0 = desligado). Parse = entrada+baixa; chat separado.
+AI_PARSE_DAILY_LIMIT=50
+AI_CHAT_DAILY_LIMIT=40
 ```
+
+Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com o processo).
 
 ## OAuth (Google / Apple)
 
@@ -154,6 +175,6 @@ AI_MODEL=gemini-2.5-flash
 2. No front: `VITE_GOOGLE_CLIENT_ID`, `VITE_APPLE_CLIENT_ID`, `VITE_APPLE_REDIRECT_URI`.
 3. O browser obtém o `id_token` via SDK e envia para a API — teste preferencialmente pelo **client**, não pelo Swagger.
 
-## Fora desta entrega (Fase 2+)
+## Fora desta entrega
 
-Chat, OCR/foto, QR NF-e, filas Redis/BullMQ, e-mail transacional, push, generate de lista por IA. Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+OCR/foto (`parse-image`), QR NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
