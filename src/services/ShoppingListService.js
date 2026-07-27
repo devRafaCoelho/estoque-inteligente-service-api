@@ -109,9 +109,54 @@ async function loadDetail(userId, client = db) {
   return ShoppingListDto(list, items, viewMode);
 }
 
+/**
+ * Calcula sugestões automáticas que ainda não estão na lista (sem gravar).
+ */
+async function collectSuggestionsToAdd(userId, client = db) {
+  const list = await ensureActiveList(userId, client);
+  const products = await ProductRepository.list(userId, { active: true }, client);
+  const suggestions = buildRuleSuggestions(products);
+  const current = await ShoppingListItemRepository.listByList(list.id, client);
+  const existingProductIds = new Set(
+    current.filter((i) => i.product_id).map((i) => i.product_id),
+  );
+  const existingNames = new Set(current.map((i) => String(i.name).toLowerCase()));
+
+  const toAdd = suggestions.filter((item) => {
+    if (item.productId && existingProductIds.has(item.productId)) return false;
+    if (existingNames.has(String(item.name).toLowerCase())) return false;
+    return true;
+  });
+
+  return { list, current, suggestions, toAdd };
+}
+
 const ShoppingListService = {
   async getActive(userId) {
     return loadDetail(userId);
+  },
+
+  /**
+   * Prévia das sugestões (rules) sem alterar a lista.
+   */
+  async previewSuggestions(userId, { mode = "rules" } = {}) {
+    if (mode !== "rules") {
+      throw new AppError("Nesta versão só o modo rules está disponível", 400);
+    }
+    const { current, toAdd } = await collectSuggestionsToAdd(userId);
+    const pending = current.filter((row) => !row.checked);
+    return {
+      mode: "rules",
+      newSuggestions: toAdd.map((item) => ({
+        name: item.name,
+        suggestedQty: item.suggestedQty,
+        unit: item.unit,
+        priority: item.priority,
+        origin: item.origin,
+      })),
+      pendingCount: pending.length,
+      pendingNames: pending.slice(0, 8).map((row) => row.name),
+    };
   },
 
   async generate(userId, { mode = "rules" } = {}) {
@@ -121,21 +166,8 @@ const ShoppingListService = {
 
     return db.withTransaction(async (client) => {
       const list = await ensureActiveList(userId, client);
-      const products = await ProductRepository.list(userId, { active: true }, client);
-      const suggestions = buildRuleSuggestions(products);
-
       await ShoppingListItemRepository.deleteUncheckedAuto(list.id, client);
-      const current = await ShoppingListItemRepository.listByList(list.id, client);
-      const existingProductIds = new Set(
-        current.filter((i) => i.product_id).map((i) => i.product_id),
-      );
-      const existingNames = new Set(current.map((i) => String(i.name).toLowerCase()));
-
-      const toAdd = suggestions.filter((item) => {
-        if (item.productId && existingProductIds.has(item.productId)) return false;
-        if (existingNames.has(String(item.name).toLowerCase())) return false;
-        return true;
-      });
+      const { toAdd } = await collectSuggestionsToAdd(userId, client);
 
       if (toAdd.length) {
         await ShoppingListItemRepository.createMany(list.id, toAdd, client);

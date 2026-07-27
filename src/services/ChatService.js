@@ -41,13 +41,14 @@ function buildSystemPrompt(contextText) {
 Escolha UMA tool adequada à intenção do usuário:
 - answer: perguntas factuais (estoque, quantidades, o que está acabando)
 - propose_stock_out: usuário quer registrar consumo/baixa
-- propose_shopping_list: usuário quer saber o que comprar / atualizar lista
+- propose_shopping_list: usuário quer saber o que comprar — propõe itens; só grava após CTA
 - finance_tip: gastos do mês, dicas financeiras
 
 REGRAS:
 - Prefira tools em vez de inventar números.
 - Use só o contexto abaixo como verdade; não invente saldos.
 - Para baixa, passe o texto completo do usuário em propose_stock_out.text.
+- Propostas mutáveis sempre passam por card/CTA de revisão (nunca confirme estoque no chat).
 
 Contexto atual do usuário:
 ${contextText}`;

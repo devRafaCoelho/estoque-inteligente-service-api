@@ -48,7 +48,7 @@ const TOOL_DEFINITIONS = [
     function: {
       name: "propose_shopping_list",
       description:
-        "Gera/atualiza a lista de compras com regras do estoque (produtos baixos, zerados e recompra). O usuário revisa na tela da lista.",
+        "Propõe itens para a lista de compras com regras do estoque (baixos, zerados, recompra). Não grava a lista — o usuário confirma no card/CTA.",
       parameters: {
         type: "object",
         properties: {
@@ -66,7 +66,7 @@ const TOOL_DEFINITIONS = [
     function: {
       name: "finance_tip",
       description:
-        "Retorna resumo de gastos do mês e dicas financeiras do app (mesma base da tela Financeiro).",
+        "Retorna resumo de gastos do mês e dicas financeiras do app (mesma base da tela Financeiro). Só leitura — sem mutação.",
       parameters: {
         type: "object",
         properties: {
@@ -130,6 +130,7 @@ async function runProposeStockOut(userId, args = {}) {
         tool: "propose_stock_out",
         stockOutId: stockOut.id,
         path: `/baixa/${stockOut.id}/preview`,
+        requiresReview: true,
         itemCount: items.length,
         items: items.slice(0, 8).map((item) => ({
           name: item.name,
@@ -156,41 +157,44 @@ async function runProposeStockOut(userId, args = {}) {
 async function runProposeShoppingList(userId, args = {}) {
   const mode = args.mode === "rules" || !args.mode ? "rules" : "rules";
   try {
-    const before = await ShoppingListService.getActive(userId);
-    const beforePending = before?.stats?.pending ?? 0;
-
-    const list = await ShoppingListService.generate(userId, { mode });
-    const pending = list?.stats?.pending ?? 0;
-    const total = list?.stats?.total ?? 0;
-    const pendingNames = (list.items || [])
-      .filter((item) => !item.checked)
-      .slice(0, 8)
-      .map((item) => item.name);
+    const preview = await ShoppingListService.previewSuggestions(userId, { mode });
+    const newItems = preview.newSuggestions || [];
+    const names = newItems.slice(0, 8).map((item) => item.name);
+    const pendingNames = preview.pendingNames || [];
 
     let content;
-    if (pending === 0) {
-      content = "Gerei a lista automática, mas não há itens pendentes no momento.";
-    } else if (pending > beforePending) {
-      content = `Atualizei a lista de compras: ${pending} pendente(s) (antes ${beforePending}). Exemplos: ${pendingNames.join(", ")}.`;
+    if (newItems.length > 0) {
+      content = `Sugeri ${newItems.length} item(ns) para a lista: ${names.join(", ")}${
+        newItems.length > 8 ? "…" : ""
+      }. Salve para aplicar — nada foi gravado ainda.`;
+    } else if (preview.pendingCount > 0) {
+      content = `Não há itens novos pelas regras agora. Sua lista já tem ${preview.pendingCount} pendente(s): ${pendingNames.join(", ") || "—"}.`;
     } else {
-      content = `Sua lista tem ${pending} item(ns) pendente(s)${total ? ` de ${total}` : ""}. Exemplos: ${pendingNames.join(", ") || "—"}.`;
+      content = "Pelas regras do estoque, não há sugestões novas para a lista no momento.";
     }
 
     return {
       content,
       payload: {
-        type: "shopping_list",
+        type: "shopping_list_proposal",
         tool: "propose_shopping_list",
         path: "/lista-compras",
-        pending,
-        total,
-        itemNames: pendingNames,
+        requiresSave: newItems.length > 0,
+        mode,
+        itemCount: newItems.length,
+        pendingCount: preview.pendingCount,
+        items: newItems.slice(0, 8).map((item) => ({
+          name: item.name,
+          quantity: item.suggestedQty,
+          unit: item.unit,
+        })),
+        itemNames: names,
       },
     };
   } catch (err) {
     logger.warn("propose_shopping_list falhou", { message: err.message });
     return {
-      content: err.message || "Não consegui gerar a lista agora. Tente em Lista de compras.",
+      content: err.message || "Não consegui montar a sugestão de lista. Tente em Lista de compras.",
       payload: {
         type: "answer",
         tool: "propose_shopping_list",
@@ -232,6 +236,7 @@ async function runFinanceTip(userId, args = {}) {
         type: "finance_tip",
         tool: "finance_tip",
         path: "/financeiro",
+        requiresReview: false,
         month: month
           ? {
               total: month.total,
