@@ -3,6 +3,7 @@ const IntakeController = require("../controllers/IntakeController");
 const validateSchema = require("../middlewares/validateSchema");
 const validateAuthentication = require("../middlewares/validateAuthentication");
 const asyncHandler = require("../utils/asyncHandler");
+const aiRateLimit = require("../middlewares/aiRateLimit");
 const {
   parseNaturalLanguageSchema,
   updateIntakeSchema,
@@ -17,6 +18,7 @@ router.get("/", asyncHandler(IntakeController.list));
 router.post("/clear-drafts", asyncHandler(IntakeController.clearDrafts));
 router.post(
   "/parse-text",
+  aiRateLimit("parse"),
   validateSchema(parseNaturalLanguageSchema),
   asyncHandler(IntakeController.parseText),
 );

@@ -20,6 +20,9 @@ const schema = Joi.object({
     .allow("")
     .default("https://generativelanguage.googleapis.com/v1beta/openai/"),
   AI_MODEL: Joi.string().allow("").default("gemini-2.5-flash"),
+  // Rate limit diário de IA (0 = desligado). Contadores em memória (v1).
+  AI_PARSE_DAILY_LIMIT: Joi.number().integer().min(0).default(50),
+  AI_CHAT_DAILY_LIMIT: Joi.number().integer().min(0).default(40),
 }).unknown(true);
 
 const { value, error } = schema.validate(process.env);

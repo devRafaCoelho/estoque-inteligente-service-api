@@ -3,6 +3,7 @@ const StockOutController = require("../controllers/StockOutController");
 const validateSchema = require("../middlewares/validateSchema");
 const validateAuthentication = require("../middlewares/validateAuthentication");
 const asyncHandler = require("../utils/asyncHandler");
+const aiRateLimit = require("../middlewares/aiRateLimit");
 const {
   parseConsumeTextSchema,
   updateStockOutSchema,
@@ -17,6 +18,7 @@ router.get("/", asyncHandler(StockOutController.list));
 router.post("/clear-drafts", asyncHandler(StockOutController.clearDrafts));
 router.post(
   "/parse-text",
+  aiRateLimit("parse"),
   validateSchema(parseConsumeTextSchema),
   asyncHandler(StockOutController.parseText),
 );
