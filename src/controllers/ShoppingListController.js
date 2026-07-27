@@ -6,6 +6,11 @@ const ShoppingListController = {
     return res.status(200).json({ list });
   },
 
+  async previewSuggestions(req, res) {
+    const preview = await ShoppingListService.previewSuggestions(req.user.id, req.query);
+    return res.status(200).json({ preview });
+  },
+
   async generate(req, res) {
     const list = await ShoppingListService.generate(req.user.id, req.body);
     return res.status(200).json({ list });

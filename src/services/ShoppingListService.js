@@ -147,6 +147,7 @@ const ShoppingListService = {
     const pending = current.filter((row) => !row.checked);
     return {
       mode: "rules",
+      newCount: toAdd.length,
       newSuggestions: toAdd.map((item) => ({
         name: item.name,
         suggestedQty: item.suggestedQty,

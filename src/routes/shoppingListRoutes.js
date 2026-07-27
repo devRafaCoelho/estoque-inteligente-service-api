@@ -15,6 +15,7 @@ const router = Router();
 router.use(validateAuthentication);
 
 router.get("/active", asyncHandler(ShoppingListController.getActive));
+router.get("/suggestions-preview", asyncHandler(ShoppingListController.previewSuggestions));
 router.post(
   "/generate",
   validateSchema(generateShoppingListSchema),
