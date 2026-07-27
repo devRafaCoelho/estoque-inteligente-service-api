@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { clampLimit } = require("../utils/pagination");
 
 const StockIntakeRepository = {
   async create(
@@ -43,7 +44,7 @@ const StockIntakeRepository = {
          AND i.status = $2
        ORDER BY i.updated_at DESC
        LIMIT $3`,
-      [userId, status, Math.min(Math.max(Number(limit) || 20, 1), 50)],
+      [userId, status, clampLimit(limit, { min: 1, max: 50, fallback: 20 })],
     );
     return rows;
   },

@@ -4,18 +4,21 @@ const StockIntakeRepository = require("../repositories/StockIntakeRepository");
 const StockIntakeItemRepository = require("../repositories/StockIntakeItemRepository");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
+const PurchaseRepository = require("../repositories/PurchaseRepository");
 const { IntakeDetailDto } = require("../dto/v1/intakeDto");
 const { ProductListDto } = require("../dto/v1/productDto");
+const { assertDraftDocument } = require("../utils/draftDocument");
 const StockMonitorService = require("./StockMonitorService");
 
 const IntakeConfirmService = {
   async confirm(userId, intakeId, body) {
     return db.withTransaction(async (client) => {
       const intake = await StockIntakeRepository.findById(userId, intakeId, client);
-      if (!intake) throw new AppError("Entrada não encontrada", 404);
-      if (intake.status !== "draft") {
-        throw new AppError("Esta entrada já foi confirmada ou cancelada", 400);
-      }
+      assertDraftDocument(
+        intake,
+        "Entrada não encontrada",
+        "Esta entrada já foi confirmada ou cancelada",
+      );
 
       const activeItems = (body.items || []).filter((item) => !item.excluded);
       if (!activeItems.length) {
@@ -136,46 +139,19 @@ const IntakeConfirmService = {
         affectedProducts.push(ProductListDto(product));
       }
 
-      // Financeiro simples: só cria purchase se houver algum preço
       let purchase = null;
       const priced = activeItems.filter((item) => item.unitPrice != null);
       if (priced.length) {
-        const total = priced.reduce(
-          (sum, item) => sum + Number(item.quantity) * Number(item.unitPrice),
-          0,
-        );
-        const { rows: purchaseRows } = await client.query(
-          `INSERT INTO purchases (user_id, intake_id, store_name, purchased_at, total_amount)
-           VALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()), $5)
-           RETURNING *`,
-          [
+        purchase = await PurchaseRepository.createWithItems(
+          {
             userId,
             intakeId,
-            body.storeName || null,
-            body.purchasedAt || null,
-            total,
-          ],
+            storeName: body.storeName || null,
+            purchasedAt: body.purchasedAt || null,
+            items: priced,
+          },
+          client,
         );
-        purchase = purchaseRows[0];
-
-        for (const item of priced) {
-          const lineTotal = Number(item.quantity) * Number(item.unitPrice);
-          await client.query(
-            `INSERT INTO purchase_items
-               (purchase_id, product_id, name, quantity, unit, unit_price, line_total, category)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [
-              purchase.id,
-              item.productId || null,
-              item.name,
-              item.quantity,
-              item.unit,
-              item.unitPrice,
-              lineTotal,
-              item.category || null,
-            ],
-          );
-        }
       }
 
       const confirmed = await StockIntakeRepository.updateStatus(

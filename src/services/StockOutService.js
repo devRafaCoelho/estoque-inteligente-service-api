@@ -6,6 +6,8 @@ const ProductRepository = require("../repositories/ProductRepository");
 const StockOutRepository = require("../repositories/StockOutRepository");
 const StockOutItemRepository = require("../repositories/StockOutItemRepository");
 const { StockOutDetailDto } = require("../dto/v1/stockOutDto");
+const { assertDraftDocument } = require("../utils/draftDocument");
+const { productHintsFrom } = require("../utils/productHints");
 
 function enrichWarnings(items) {
   return items.map((item) => {
@@ -45,7 +47,7 @@ async function loadDetail(userId, stockOutId, client = db) {
 const StockOutService = {
   async parseNaturalLanguage(userId, text) {
     const products = await ProductRepository.list(userId, { active: true });
-    const productHints = products.slice(0, 40).map((p) => p.name);
+    const productHints = productHintsFrom(products);
     const parsed = await AiParseService.parseConsume(text, { productHints });
 
     return db.withTransaction(async (client) => {
@@ -87,10 +89,11 @@ const StockOutService = {
 
   async update(userId, stockOutId, body) {
     const stockOut = await StockOutRepository.findById(userId, stockOutId);
-    if (!stockOut) throw new AppError("Baixa não encontrada", 404);
-    if (stockOut.status !== "draft") {
-      throw new AppError("Só é possível editar baixas em rascunho", 400);
-    }
+    assertDraftDocument(
+      stockOut,
+      "Baixa não encontrada",
+      "Só é possível editar baixas em rascunho",
+    );
 
     return db.withTransaction(async (client) => {
       const enriched = enrichWarnings(
@@ -116,10 +119,11 @@ const StockOutService = {
 
   async cancel(userId, stockOutId) {
     const stockOut = await StockOutRepository.findById(userId, stockOutId);
-    if (!stockOut) throw new AppError("Baixa não encontrada", 404);
-    if (stockOut.status !== "draft") {
-      throw new AppError("Só é possível cancelar baixas em rascunho", 400);
-    }
+    assertDraftDocument(
+      stockOut,
+      "Baixa não encontrada",
+      "Só é possível cancelar baixas em rascunho",
+    );
     const cancelled = await StockOutRepository.updateStatus(userId, stockOutId, "cancelled");
     const items = await StockOutItemRepository.listByStockOut(stockOutId);
     return StockOutDetailDto(cancelled, items);

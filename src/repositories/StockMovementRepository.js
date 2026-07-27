@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { clampLimit } = require("../utils/pagination");
 
 const StockMovementRepository = {
   async create(data, client = db) {
@@ -30,7 +31,7 @@ const StockMovementRepository = {
        WHERE user_id = $1 AND product_id = $2
        ORDER BY created_at DESC
        LIMIT $3`,
-      [userId, productId, limit],
+      [userId, productId, clampLimit(limit, { min: 1, max: 100, fallback: 50 })],
     );
     return rows;
   },

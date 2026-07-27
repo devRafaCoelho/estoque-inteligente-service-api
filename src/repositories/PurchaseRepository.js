@@ -1,4 +1,6 @@
 const db = require("../config/db");
+const { clampLimit } = require("../utils/pagination");
+const { lineTotal } = require("../utils/money");
 
 const PurchaseRepository = {
   async sumTotal(userId, from, to, client = db) {
@@ -66,9 +68,50 @@ const PurchaseRepository = {
        WHERE user_id = $1
        ORDER BY purchased_at DESC
        LIMIT $2`,
-      [userId, limit],
+      [userId, clampLimit(limit, { min: 1, max: 50, fallback: 10 })],
     );
     return rows;
+  },
+
+  /**
+   * Cria purchase + itens numa transação (client obrigatório).
+   */
+  async createWithItems(
+    { userId, intakeId, storeName = null, purchasedAt = null, items = [] },
+    client = db,
+  ) {
+    const total = items.reduce((sum, item) => {
+      const line = lineTotal(item.quantity, item.unitPrice);
+      return sum + (line ?? 0);
+    }, 0);
+    const { rows: purchaseRows } = await client.query(
+      `INSERT INTO purchases (user_id, intake_id, store_name, purchased_at, total_amount)
+       VALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()), $5)
+       RETURNING *`,
+      [userId, intakeId, storeName, purchasedAt, total],
+    );
+    const purchase = purchaseRows[0];
+
+    for (const item of items) {
+      const line = lineTotal(item.quantity, item.unitPrice) ?? 0;
+      await client.query(
+        `INSERT INTO purchase_items
+           (purchase_id, product_id, name, quantity, unit, unit_price, line_total, category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          purchase.id,
+          item.productId || null,
+          item.name,
+          item.quantity,
+          item.unit,
+          item.unitPrice,
+          line,
+          item.category || null,
+        ],
+      );
+    }
+
+    return purchase;
   },
 };
 

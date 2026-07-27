@@ -6,6 +6,8 @@ const ProductRepository = require("../repositories/ProductRepository");
 const StockIntakeRepository = require("../repositories/StockIntakeRepository");
 const StockIntakeItemRepository = require("../repositories/StockIntakeItemRepository");
 const { IntakeDetailDto, IntakeSummaryDto } = require("../dto/v1/intakeDto");
+const { assertDraftDocument } = require("../utils/draftDocument");
+const { productHintsFrom } = require("../utils/productHints");
 
 async function loadDetail(userId, intakeId, client = db) {
   const intake = await StockIntakeRepository.findById(userId, intakeId, client);
@@ -29,7 +31,7 @@ const IntakeService = {
 
   async parseNaturalLanguage(userId, text) {
     const products = await ProductRepository.list(userId, { active: true });
-    const productHints = products.slice(0, 40).map((p) => p.name);
+    const productHints = productHintsFrom(products);
 
     const parsed = await AiParseService.parseIntake(text, { productHints });
 
@@ -63,10 +65,11 @@ const IntakeService = {
 
   async update(userId, intakeId, body) {
     const intake = await StockIntakeRepository.findById(userId, intakeId);
-    if (!intake) throw new AppError("Entrada não encontrada", 404);
-    if (intake.status !== "draft") {
-      throw new AppError("Só é possível editar entradas em rascunho", 400);
-    }
+    assertDraftDocument(
+      intake,
+      "Entrada não encontrada",
+      "Só é possível editar entradas em rascunho",
+    );
 
     return db.withTransaction(async (client) => {
       const rawPayload = {
@@ -99,10 +102,11 @@ const IntakeService = {
 
   async cancel(userId, intakeId) {
     const intake = await StockIntakeRepository.findById(userId, intakeId);
-    if (!intake) throw new AppError("Entrada não encontrada", 404);
-    if (intake.status !== "draft") {
-      throw new AppError("Só é possível cancelar entradas em rascunho", 400);
-    }
+    assertDraftDocument(
+      intake,
+      "Entrada não encontrada",
+      "Só é possível cancelar entradas em rascunho",
+    );
     const cancelled = await StockIntakeRepository.updateStatus(userId, intakeId, "cancelled");
     const items = await StockIntakeItemRepository.listByIntake(intakeId);
     return IntakeDetailDto(cancelled, items);

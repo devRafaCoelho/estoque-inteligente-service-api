@@ -4,12 +4,12 @@ const NotificationRepository = require("../repositories/NotificationRepository")
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 const stockStatus = require("../utils/stockStatus");
+const { isRepurchaseDue, MS_PER_DAY } = require("../utils/stockRules");
 const logger = require("../utils/logger");
 
 const STOCK_DEDUP_HOURS = 72;
 const REPURCHASE_DEDUP_HOURS = 72;
 const DEFAULT_NUDGE_DAYS = 5;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function formatQty(quantity, unit) {
   const n = Number(quantity);
@@ -21,16 +21,6 @@ function daysSince(date) {
   const then = new Date(date).getTime();
   if (!Number.isFinite(then)) return null;
   return Math.max(0, Math.floor((Date.now() - then) / MS_PER_DAY));
-}
-
-function isRepurchaseDue(product, now = Date.now()) {
-  const days = Number(product.repurchase_days);
-  if (!Number.isFinite(days) || days < 1 || !product.last_purchased_at) {
-    return false;
-  }
-  const dueAt =
-    new Date(product.last_purchased_at).getTime() + days * MS_PER_DAY;
-  return Number.isFinite(dueAt) && dueAt <= now;
 }
 
 async function ensureStockAlert(userId, { type, product, title, body }) {

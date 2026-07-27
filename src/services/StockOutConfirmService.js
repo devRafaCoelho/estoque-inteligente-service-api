@@ -6,16 +6,18 @@ const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const { StockOutDetailDto } = require("../dto/v1/stockOutDto");
 const { ProductListDto } = require("../dto/v1/productDto");
+const { assertDraftDocument } = require("../utils/draftDocument");
 const StockMonitorService = require("./StockMonitorService");
 
 const StockOutConfirmService = {
   async confirm(userId, stockOutId, body) {
     return db.withTransaction(async (client) => {
       const stockOut = await StockOutRepository.findById(userId, stockOutId, client);
-      if (!stockOut) throw new AppError("Baixa não encontrada", 404);
-      if (stockOut.status !== "draft") {
-        throw new AppError("Esta baixa já foi confirmada ou cancelada", 400);
-      }
+      assertDraftDocument(
+        stockOut,
+        "Baixa não encontrada",
+        "Esta baixa já foi confirmada ou cancelada",
+      );
 
       const activeItems = (body.items || []).filter((item) => !item.excluded);
       if (!activeItems.length) {

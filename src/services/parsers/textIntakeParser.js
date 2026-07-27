@@ -39,6 +39,31 @@ const UNIT_ALIASES = {
 const UNIT_TOKEN =
   "quilos?|kilos?|quilo|kilo|kg|gramas?|grama|gr|g|mililitros?|ml|litros?|litro|lt|l|unidades?|unidade|und|un|u|pacotes?|pacote|pack|pct|latas?|lata|garrafas?|garrafa|caixas?|caixa|can|bottle|box";
 
+const SPOKEN_QTY_TOKEN =
+  "uma|umas|uns|um|duas|dois|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|meia|meio";
+
+const SPOKEN_QUANTITIES = {
+  um: 1,
+  uma: 1,
+  uns: 1,
+  umas: 1,
+  dois: 2,
+  duas: 2,
+  tres: 3,
+  três: 3,
+  quatro: 4,
+  cinco: 5,
+  seis: 6,
+  sete: 7,
+  oito: 8,
+  nove: 9,
+  dez: 10,
+  onze: 11,
+  doze: 12,
+  meio: 0.5,
+  meia: 0.5,
+};
+
 const CATEGORY_HINTS = [
   { category: "dairy", words: ["leite", "queijo", "iogurte", "manteiga", "requeijão"] },
   { category: "beverages", words: ["água", "agua", "refrigerante", "suco", "cerveja", "café", "cafe"] },
@@ -73,6 +98,19 @@ function titleCaseName(name) {
 }
 
 function parseQuantity(raw) {
+  const key = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  if (Object.prototype.hasOwnProperty.call(SPOKEN_QUANTITIES, key)) {
+    return SPOKEN_QUANTITIES[key];
+  }
+  // chave com acento original
+  const rawKey = String(raw || "").trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(SPOKEN_QUANTITIES, rawKey)) {
+    return SPOKEN_QUANTITIES[rawKey];
+  }
   return Number(String(raw).replace(",", "."));
 }
 
@@ -81,75 +119,124 @@ function cleanProductName(nameRaw) {
 }
 
 /**
+ * Quebra texto contínuo (voz sem vírgulas) em candidatos a item.
+ * Ex.: "2 kg de arroz um leite 500 gramas de feijão"
+ */
+function splitItemChunks(text) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+
+  const softSplit = cleaned
+    .split(/\n|;|,(?![^()]*\))|\se\s/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const boundary = new RegExp(
+    `(?:^|\\s)(?=((?:\\d+(?:[.,]\\d+)?)|(?:${SPOKEN_QTY_TOKEN}))(?:\\s*(?:${UNIT_TOKEN})\\b)?(?:\\s+de)?\\s+[A-Za-zÀ-ú])`,
+    "gi",
+  );
+
+  const chunks = [];
+  for (const part of softSplit) {
+    const starts = [];
+    boundary.lastIndex = 0;
+    let match = boundary.exec(part);
+    while (match) {
+      const idx = match[0].startsWith(" ") ? match.index + 1 : match.index;
+      if (starts.length === 0 || starts[starts.length - 1] !== idx) {
+        starts.push(idx);
+      }
+      if (match.index === boundary.lastIndex) boundary.lastIndex += 1;
+      match = boundary.exec(part);
+    }
+
+    if (starts.length <= 1) {
+      chunks.push(part);
+      continue;
+    }
+
+    for (let i = 0; i < starts.length; i += 1) {
+      const from = starts[i];
+      const to = i + 1 < starts.length ? starts[i + 1] : part.length;
+      const slice = part.slice(from, to).trim();
+      if (slice) chunks.push(slice);
+    }
+  }
+
+  return chunks;
+}
+
+function parseChunk(chunk) {
+  const qtyFirst = new RegExp(
+    `^((?:\\d+(?:[.,]\\d+)?)|(?:${SPOKEN_QTY_TOKEN}))\\s*(?:(${UNIT_TOKEN})\\b\\s*)?(?:de\\s+)?(.+)$`,
+    "i",
+  );
+  const nameFirst = new RegExp(
+    `^(.+?)\\s+((?:\\d+(?:[.,]\\d+)?)|(?:${SPOKEN_QTY_TOKEN}))\\s*(${UNIT_TOKEN})?$`,
+    "i",
+  );
+
+  let match = chunk.match(qtyFirst);
+  let quantityRaw;
+  let unitRaw;
+  let nameRaw;
+
+  if (match) {
+    [, quantityRaw, unitRaw, nameRaw] = match;
+  } else {
+    match = chunk.match(nameFirst);
+    if (match) {
+      [, nameRaw, quantityRaw, unitRaw] = match;
+    }
+  }
+
+  if (!match) {
+    const nameOnly = chunk.replace(/^(um|uma|uns|umas)\s+/i, "").trim();
+    if (nameOnly.length < 2) return null;
+    return {
+      name: titleCaseName(nameOnly),
+      quantity: 1,
+      unit: "un",
+      category: guessCategory(nameOnly),
+      unitPrice: null,
+      confidence: 0.55,
+    };
+  }
+
+  const quantity = parseQuantity(quantityRaw);
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+
+  const name = cleanProductName(nameRaw);
+  if (name.length < 2) return null;
+
+  return {
+    name,
+    quantity,
+    unit: normalizeUnit(unitRaw),
+    category: guessCategory(name),
+    unitPrice: null,
+    confidence: unitRaw ? 0.8 : 0.65,
+  };
+}
+
+/**
  * Parser heurístico local (Etapa 1).
  * Exemplos aceitos:
  * - "2kg arroz, 1 leite, 500g feijão"
  * - "comprei 2 kg de arroz e 1 litro de leite"
+ * - "2 kg de arroz um leite 500 gramas de feijão" (voz sem vírgulas)
  */
 function parseHeuristicIntake(text) {
   const cleaned = String(text)
     .replace(/\bcomprei\b/gi, "")
     .trim();
 
-  const chunks = cleaned
-    .split(/\n|;|,(?![^()]*\))|\se\s/i)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  const qtyFirst = new RegExp(
-    `^(\\d+(?:[.,]\\d+)?)\\s*(?:(${UNIT_TOKEN})\\b\\s*)?(?:de\\s+)?(.+)$`,
-    "i",
-  );
-  const nameFirst = new RegExp(
-    `^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${UNIT_TOKEN})?$`,
-    "i",
-  );
-
+  const chunks = splitItemChunks(cleaned);
   const items = [];
 
   for (const chunk of chunks) {
-    let match = chunk.match(qtyFirst);
-    let quantityRaw;
-    let unitRaw;
-    let nameRaw;
-
-    if (match) {
-      [, quantityRaw, unitRaw, nameRaw] = match;
-    } else {
-      match = chunk.match(nameFirst);
-      if (match) {
-        [, nameRaw, quantityRaw, unitRaw] = match;
-      }
-    }
-
-    if (!match) {
-      const nameOnly = chunk.replace(/^(um|uma|uns|umas)\s+/i, "").trim();
-      if (nameOnly.length < 2) continue;
-      items.push({
-        name: titleCaseName(nameOnly),
-        quantity: 1,
-        unit: "un",
-        category: guessCategory(nameOnly),
-        unitPrice: null,
-        confidence: 0.55,
-      });
-      continue;
-    }
-
-    const quantity = parseQuantity(quantityRaw);
-    if (!Number.isFinite(quantity) || quantity <= 0) continue;
-
-    const name = cleanProductName(nameRaw);
-    if (name.length < 2) continue;
-
-    items.push({
-      name,
-      quantity,
-      unit: normalizeUnit(unitRaw),
-      category: guessCategory(name),
-      unitPrice: null,
-      confidence: unitRaw ? 0.8 : 0.65,
-    });
+    const item = parseChunk(chunk);
+    if (item) items.push(item);
   }
 
   return {
@@ -159,9 +246,32 @@ function parseHeuristicIntake(text) {
   };
 }
 
+/**
+ * Indica se o LLM provavelmente colapsou vários itens em um nome só.
+ */
+function looksLikeCollapsedMultiItem(item, heuristicItems = []) {
+  if (!item || heuristicItems.length < 2) return false;
+  const name = String(item.name || "").toLowerCase();
+  if (!name) return false;
+
+  const hits = heuristicItems.filter((candidate) => {
+    const token = String(candidate.name || "")
+      .toLowerCase()
+      .split(/\s+/)[0];
+    return token && name.includes(token);
+  });
+
+  if (hits.length >= 2) return true;
+
+  // nome longo com outra quantidade no meio
+  return /\d/.test(name) || new RegExp(`\\b(?:${SPOKEN_QTY_TOKEN})\\b`, "i").test(name);
+}
+
 module.exports = {
   UNITS,
   normalizeUnit,
   guessCategory,
   parseHeuristicIntake,
+  splitItemChunks,
+  looksLikeCollapsedMultiItem,
 };

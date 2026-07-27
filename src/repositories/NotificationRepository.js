@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { clampLimit } = require("../utils/pagination");
 
 const NotificationRepository = {
   async list(userId, { unreadOnly = false, limit = 50 } = {}, client = db) {
@@ -7,7 +8,7 @@ const NotificationRepository = {
     if (unreadOnly) {
       where.push("read_at IS NULL");
     }
-    values.push(Math.min(Number(limit) || 50, 100));
+    values.push(clampLimit(limit, { min: 1, max: 100, fallback: 50 }));
     const { rows } = await client.query(
       `SELECT * FROM notifications
        WHERE ${where.join(" AND ")}

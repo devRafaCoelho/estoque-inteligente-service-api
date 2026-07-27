@@ -7,6 +7,8 @@ const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepo
 const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
 const { ShoppingListDto, ShoppingListItemDto } = require("../dto/v1/shoppingListDto");
 const { normalizeUnit } = require("./parsers/textIntakeParser");
+const { resolveShoppingListOrigin } = require("../utils/stockRules");
+const { productHintsFrom } = require("../utils/productHints");
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
 
@@ -66,29 +68,10 @@ function buildRuleSuggestions(products) {
 
   for (const product of products) {
     if (!product.active) continue;
-    const qty = Number(product.quantity);
-    const minQty = Number(product.min_quantity);
-    let origin = null;
-    let priority = "medium";
+    const resolved = resolveShoppingListOrigin(product, now);
+    if (!resolved) continue;
 
-    if (qty <= 0) {
-      origin = "out_of_stock";
-      priority = "high";
-    } else if (qty <= minQty) {
-      origin = "low_stock";
-      priority = "high";
-    } else if (product.repurchase_days && product.last_purchased_at) {
-      const dueAt =
-        new Date(product.last_purchased_at).getTime() +
-        Number(product.repurchase_days) * 24 * 60 * 60 * 1000;
-      if (dueAt <= now) {
-        origin = "repurchase_time";
-        priority = "medium";
-      }
-    }
-
-    if (!origin) continue;
-
+    const { origin, priority } = resolved;
     const candidate = {
       productId: product.id,
       name: product.name,
@@ -174,7 +157,7 @@ const ShoppingListService = {
       if (freeText && !hasStructuredQty) {
         try {
           const products = await ProductRepository.list(userId, { active: true }, client);
-          const productHints = products.slice(0, 40).map((p) => p.name);
+          const productHints = productHintsFrom(products);
           const parsed = await AiParseService.parseIntake(freeText, { productHints });
           toCreate = parsed.items.map((item) => ({
             productId: body.productId || null,

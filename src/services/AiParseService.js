@@ -4,7 +4,12 @@ const AppError = require("../utils/AppError");
 const env = require("../config/env");
 const logger = require("../utils/logger");
 const { CATEGORIES, UNITS } = require("../schemas/productSchemas");
-const { parseHeuristicIntake, normalizeUnit, guessCategory } = require("./parsers/textIntakeParser");
+const {
+  parseHeuristicIntake,
+  normalizeUnit,
+  guessCategory,
+  looksLikeCollapsedMultiItem,
+} = require("./parsers/textIntakeParser");
 
 const parsedItemSchema = Joi.object({
   name: Joi.string().min(1).max(200).required(),
@@ -76,7 +81,7 @@ Tarefa: interpretar uma ${actionLabel}.
 
 Unidades permitidas: ${UNITS.join(", ")}
 Categorias permitidas: ${CATEGORIES.join(", ")}
-Aliases comuns: lata→can, garrafa→bottle, pacote/pct→pack, caixa→box, litro→l.
+Aliases comuns: lata→can, garrafa→bottle, pacote/pct→pack, caixa→box, litro→l, gramas→g, quilo→kg.
 
 Responda APENAS com JSON válido, sem markdown, neste formato:
 {"action":"${action}","items":[{"name":"Arroz","quantity":2,"unit":"kg","category":"grocery","unitPrice":null,"confidence":0.9}]}
@@ -84,10 +89,18 @@ Responda APENAS com JSON válido, sem markdown, neste formato:
 Regras:
 - action deve ser "${action}"
 - quantity > 0
-- name curto e canônico (sem "comprei", "dê baixa em")
+- name curto e canônico (sem "comprei", "dê baixa em") — um produto por item
+- SEPARE cada produto em um objeto do array items, mesmo sem vírgulas, ponto-e-vírgula ou "e"
+- Texto de ditado por voz costuma vir contínuo; trate números e "um"/"uma"/"dois" como início de novo item
+- Nunca junte vários produtos no mesmo name
+- "um"/"uma" sem unidade = quantity 1 e unit "un"
 - se unidade não ficar clara, use "un"
 - se categoria não ficar clara, use "other"
 - confidence entre 0 e 1
+
+Exemplo (voz sem vírgulas):
+Entrada: "2 kg de arroz um leite 500 gramas de feijão"
+Saída: {"action":"${action}","items":[{"name":"Arroz","quantity":2,"unit":"kg","category":"grocery","unitPrice":null,"confidence":0.92},{"name":"Leite","quantity":1,"unit":"un","category":"dairy","unitPrice":null,"confidence":0.9},{"name":"Feijão","quantity":500,"unit":"g","category":"grocery","unitPrice":null,"confidence":0.92}]}
 ${hints}
 Texto do usuário:
 """${text}"""`;
@@ -147,10 +160,28 @@ async function parseWithFallback(action, text, productHints = []) {
     throw new AppError("Informe um texto com pelo menos 3 caracteres", 422);
   }
 
+  const heuristic =
+    action === "consume" ? parseHeuristicConsume(text) : parseHeuristicIntake(text);
+
   if (isAiConfigured()) {
     try {
       const llmResult = await parseWithLlm(action, text, productHints);
-      if (llmResult?.items?.length) return llmResult;
+      if (llmResult?.items?.length) {
+        const collapsed =
+          llmResult.items.length === 1 &&
+          looksLikeCollapsedMultiItem(llmResult.items[0], heuristic.items);
+
+        if (collapsed) {
+          logger.warn("IA colapsou vários itens; usando heurístico", {
+            action,
+            llmName: llmResult.items[0]?.name,
+            heuristicCount: heuristic.items.length,
+          });
+          if (heuristic.items.length) return heuristic;
+        }
+
+        return llmResult;
+      }
     } catch (err) {
       logger.warn("Falha no parse via IA; usando heurístico", {
         action,
@@ -158,9 +189,6 @@ async function parseWithFallback(action, text, productHints = []) {
       });
     }
   }
-
-  const heuristic =
-    action === "consume" ? parseHeuristicConsume(text) : parseHeuristicIntake(text);
 
   if (!heuristic.items.length) {
     throw new AppError(

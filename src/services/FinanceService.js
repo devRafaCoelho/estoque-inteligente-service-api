@@ -1,17 +1,7 @@
 const PurchaseRepository = require("../repositories/PurchaseRepository");
 const CatalogService = require("./CatalogService");
-
-function startOfDay(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function startOfMonth(date) {
-  const d = startOfDay(date);
-  d.setDate(1);
-  return d;
-}
+const { startOfDay, startOfMonth, monthRange } = require("../utils/dateRange");
+const { formatBRLAmount } = require("../utils/money");
 
 function percentDelta(current, previous) {
   if (previous <= 0) return current > 0 ? 100 : 0;
@@ -49,10 +39,7 @@ const FinanceService = {
       targetMonth = currentMonth;
     }
 
-    const from = new Date(targetYear, targetMonth - 1, 1);
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(targetYear, targetMonth, 1);
-    to.setHours(0, 0, 0, 0);
+    const { from, to } = monthRange(targetYear, targetMonth);
 
     return {
       year: targetYear,
@@ -207,7 +194,7 @@ const FinanceService = {
         tips.push({
           id: "month_up",
           severity: "warning",
-          message: `Você gastou R$ ${extra.toFixed(2).replace(".", ",")} a mais neste mês do que no anterior.`,
+          message: `Você gastou R$ ${formatBRLAmount(extra)} a mais neste mês do que no anterior.`,
         });
       } else if (
         summary.month.projectedTotal > 0 &&
@@ -217,7 +204,7 @@ const FinanceService = {
         tips.push({
           id: "month_projection",
           severity: "warning",
-          message: `No ritmo atual, o mês pode fechar em torno de R$ ${summary.month.projectedTotal.toFixed(2).replace(".", ",")} (acima do mês passado).`,
+          message: `No ritmo atual, o mês pode fechar em torno de R$ ${formatBRLAmount(summary.month.projectedTotal)} (acima do mês passado).`,
         });
       }
     }
