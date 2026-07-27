@@ -190,7 +190,7 @@ const IntakeService = {
       if (err instanceof AppError) throw err;
       logger.warn("Collector NF-e falhou", { message: err.message });
       throw new AppError(
-        "Não consegui ler a nota agora. Tente a foto do cupom.",
+        "Não consegui ler a nota agora. Tente a foto da nota.",
         502,
         { cause: err.message, code: "nf_collector_failed", fallback: "photo" },
       );
@@ -208,7 +208,7 @@ const IntakeService = {
 
     if (!modelItems.length) {
       throw new AppError(
-        "A nota não retornou itens. Use a foto do cupom.",
+        "A nota não retornou itens. Use a foto da nota.",
         422,
         { code: "nf_empty_items", fallback: "photo" },
       );

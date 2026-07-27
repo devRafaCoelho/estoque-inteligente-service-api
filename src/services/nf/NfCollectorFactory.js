@@ -37,7 +37,7 @@ async function collectNfItems(input) {
 
   if (!allowed.includes(stateCode)) {
     throw new AppError(
-      `Ainda não lemos notas de ${stateCode || "esta UF"}. Por enquanto: ${allowed.join(", ")}. Use a foto do cupom.`,
+      `Ainda não lemos o QR de notas de ${stateCode || "esta UF"}. Por enquanto: ${allowed.join(", ")}. Use a foto da nota.`,
       422,
       { code: "nf_uf_unsupported", stateCode, supported: allowed, fallback: "photo" },
     );
@@ -46,7 +46,7 @@ async function collectNfItems(input) {
   const Collector = COLLECTORS[stateCode];
   if (!Collector) {
     throw new AppError(
-      `UF ${stateCode} ainda sem adapter. Use a foto do cupom.`,
+      `UF ${stateCode} ainda sem adapter de QR. Use a foto da nota.`,
       422,
       { code: "nf_uf_unsupported", stateCode, fallback: "photo" },
     );

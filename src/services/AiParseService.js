@@ -233,7 +233,7 @@ async function parseWithFallback(action, text, productHints = []) {
 async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] }) {
   if (!isAiConfigured()) {
     throw new AppError(
-      "Leitura de cupom por foto exige IA configurada (AI_API_KEY).",
+      "Leitura de nota por foto exige IA configurada (AI_API_KEY).",
       503,
     );
   }
@@ -269,26 +269,59 @@ async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] 
     });
     content = response.choices?.[0]?.message?.content;
   } catch (err) {
-    logger.warn("Falha na visão/OCR do cupom", {
-      message: err.message,
-      status: err.status,
+    const status = err.status;
+    const message = String(err.message || "");
+    logger.warn("Falha na visão/OCR da nota", {
+      message,
+      status,
+      code: err.code,
     });
-    if (err.status === 404) {
+
+    if (status === 404) {
       throw new AppError(
         "Modelo de IA indisponível para visão. Verifique AI_MODEL (ex.: gemini-flash-latest).",
         503,
       );
     }
-    if (err.status === 429) {
+    if (status === 429) {
       throw new AppError(
         "Limite da IA atingido. Aguarde um pouco e tente de novo.",
         429,
       );
     }
+    if (
+      status === 401 ||
+      status === 403 ||
+      /api.?key|invalid.?key|permission|unauthenticated|unauthorized/i.test(message)
+    ) {
+      throw new AppError(
+        "IA rejeitou a autenticação. Verifique AI_API_KEY no servidor hospedado.",
+        503,
+        { code: "ai_auth_failed", cause: message },
+      );
+    }
+    if (
+      status === 413 ||
+      /payload|too large|request entity|maximum.*size/i.test(message)
+    ) {
+      throw new AppError(
+        "Imagem grande demais para a IA. Tire a foto mais de perto ou use outra imagem.",
+        413,
+        { code: "ai_payload_too_large", cause: message },
+      );
+    }
+    if (/timeout|ETIMEDOUT|timed out|AbortError|deadline/i.test(message)) {
+      throw new AppError(
+        "A leitura demorou demais no servidor. Tente de novo com outra foto ou use texto.",
+        504,
+        { code: "ai_timeout", cause: message },
+      );
+    }
+
     throw new AppError(
       "Não consegui ler a foto agora. Tente outra imagem ou use entrada por texto.",
       422,
-      { cause: err.message },
+      { cause: message, code: "ai_vision_failed" },
     );
   }
 
@@ -298,7 +331,7 @@ async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] 
   } catch (err) {
     logger.warn("Resposta de visão sem JSON válido", { message: err.message });
     throw new AppError(
-      "Não entendi o cupom nesta foto. Tire outra (mais nítida e de perto) ou use texto.",
+      "Não entendi a nota nesta foto. Tire outra (mais nítida e de perto) ou use texto.",
       422,
     );
   }
@@ -306,7 +339,7 @@ async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] 
   const items = Array.isArray(json.items) ? json.items : [];
   if (!items.length) {
     throw new AppError(
-      "Não encontrei itens nesta foto. Confira se é um cupom legível ou use entrada por texto.",
+      "Não encontrei itens nesta foto. Confira se é uma nota legível ou use entrada por texto.",
       422,
     );
   }
@@ -316,7 +349,7 @@ async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] 
   } catch (err) {
     logger.warn("JSON de visão inválido no schema", { message: err.message });
     throw new AppError(
-      "Não consegui estruturar os itens do cupom. Tente outra foto ou use texto.",
+      "Não consegui estruturar os itens da nota. Tente outra foto ou use texto.",
       422,
     );
   }
