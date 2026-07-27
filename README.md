@@ -185,7 +185,7 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 ```env
 # Lista de UFs com adapter ativo (ordem não importa para o match).
-NF_PRIORITY_STATES=SP,MG
+NF_PRIORITY_STATES=SP,MG,BA
 # true = devolve itens mock (útil se o portal SEFAZ bloquear/captcha em dev).
 NF_MOCK_COLLECTOR=false
 ```
@@ -196,6 +196,7 @@ NF_MOCK_COLLECTOR=false
 |----|---------|--------------------|--------|
 | **SP** | `SpNfCollector` | `nfce.fazenda.sp.gov.br` (QR `p=chave\|…`) | Suportado |
 | **MG** | `MgNfCollector` | `portalsped.fazenda.mg.gov.br` (NFC-e) | Suportado |
+| **BA** | `BaNfCollector` | `nfe.sefaz.ba.gov.br/.../qrcode.aspx` | Suportado — **exige QR completo** (chave + CSC/hash); chave sozinha → `nf_ba_qr_required` |
 | Demais | — | — | **Não suportado** → **422** `nf_uf_unsupported` + `fallback: "photo"` |
 
 Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layout/URL do portal mudam por estado) — roadmap em `DOCUMENTACAO.md` (Fase 3).
@@ -206,6 +207,7 @@ Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layo
 |------|--------------------|
 | Só NFC-e / NF-e no consumidor | Aceitamos modelos **55** (NF-e) e **65** (NFC-e) na chave. Outros modelos → **400**. |
 | Dependência SEFAZ | A API **baixa HTML do portal estadual** e faz parse. Sem API oficial estável; HTML pode mudar sem aviso. |
+| Bahia (BA) | O portal exige o parâmetro `p` do QR **com hash**. Sem isso, **422** `nf_ba_qr_required` / `nf_invalid_qr`. Itens vêm após POSTs ASP.NET (“Visualizar em Abas” → Produtos). |
 | Captcha / bloqueio / Cloudflare | **502** `nf_captcha` ou `nf_fetch_failed` com `fallback: "photo"`. O client deve oferecer foto/OCR (Sprint 4). |
 | Timeout | Consulta HTTP ~20s; falha de rede/timeout → **502** + fallback foto. |
 | Itens ilegíveis | HTML sem tabela de produtos → **422** `nf_empty_items` + fallback foto. |
@@ -221,6 +223,7 @@ Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layo
 | 400 | `nf_invalid_payload` | Pedir novo scan / colar chave |
 | 400 | `nf_state_required` | Pedir UF e salvar `default_state` |
 | 422 | `nf_uf_unsupported` | CTA foto (UF ainda sem adapter) |
+| 422 | `nf_ba_qr_required` / `nf_invalid_qr` | Escaneie o QR completo (BA) ou use foto |
 | 422 | `nf_empty_items` | CTA foto |
 | 502 | `nf_captcha` / `nf_fetch_failed` / `nf_collector_failed` | CTA foto; opcional “tentar QR de novo” |
 
@@ -232,4 +235,4 @@ Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layo
 
 ## Fora desta entrega
 
-Mais UFs no collector NF-e (além de SP/MG — ver tabela de cobertura acima), filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+Mais UFs no collector NF-e (além de SP/MG/BA — ver tabela de cobertura acima), filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.

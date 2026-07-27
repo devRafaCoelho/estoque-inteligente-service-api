@@ -1,14 +1,15 @@
 const env = require("../../config/env");
 const AppError = require("../../utils/AppError");
-const { SpNfCollector, MgNfCollector } = require("./collectors");
+const { SpNfCollector, MgNfCollector, BaNfCollector } = require("./collectors");
 
 const COLLECTORS = {
   SP: SpNfCollector,
   MG: MgNfCollector,
+  BA: BaNfCollector,
 };
 
 function priorityStates() {
-  return String(env.NF_PRIORITY_STATES || "SP,MG")
+  return String(env.NF_PRIORITY_STATES || "SP,MG,BA")
     .split(",")
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);

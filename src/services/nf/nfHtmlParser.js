@@ -30,6 +30,7 @@ function parseNumber(raw) {
     .replace(/[^\d,.-]/g, "")
     .replace(/\.(?=\d{3}(?:\D|$))/g, "")
     .replace(",", ".");
+  if (!text || text === "-" || text === "." || text === ",") return null;
   const n = Number(text);
   return Number.isFinite(n) ? n : null;
 }
@@ -87,6 +88,42 @@ function parseNfceHtml(html) {
     });
   }
 
+  // Padrão BA (aba Produtos): .table_produtos + .formo-prod-serv-*
+  if (!items.length) {
+    $(".table_produtos").each((index, el) => {
+      const root = $(el);
+      const name = root
+        .find(".formo-prod-serv-descricao")
+        .first()
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!name) return;
+
+      const qtyText = root.find(".formo-prod-serv-qtd").first().text();
+      const unitText = root.find(".formo-prod-serv-uc").first().text() || "UN";
+      const unitPriceText =
+        root.find(".formo-prod-serv-vu, .formo-prod-serv-vun").first().text() || "";
+      const totalText = root.find(".formo-prod-serv-vb").first().text() || "";
+
+      const quantity = parseNumber(qtyText) || 1;
+      const unit = normalizeUnit(unitText);
+      let unitPrice = parseNumber(unitPriceText);
+      if (unitPrice == null) {
+        const total = parseNumber(totalText);
+        if (total != null && quantity > 0) unitPrice = total / quantity;
+      }
+
+      items.push({
+        name,
+        quantity,
+        unit,
+        unitPrice: unitPrice != null && unitPrice >= 0 ? unitPrice : null,
+        sortOrder: index,
+      });
+    });
+  }
+
   // Fallback: linhas de tabela com 3+ colunas
   if (!items.length) {
     $("table tr").each((index, tr) => {
@@ -118,6 +155,7 @@ function parseNfceHtml(html) {
   const storeName =
     $("#u20").text().trim() ||
     $(".txtTopo").first().text().trim() ||
+    $(".formo-nfe-razao-social, .razaoSocial").first().text().trim() ||
     $("title").text().trim() ||
     null;
 
