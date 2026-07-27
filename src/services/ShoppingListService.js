@@ -270,6 +270,13 @@ const ShoppingListService = {
     return { deleted: true };
   },
 
+  async clearItems(userId) {
+    const list = await ensureActiveList(userId);
+    await ShoppingListItemRepository.deleteAllByList(list.id);
+    await ShoppingListRepository.touch(userId, list.id, {});
+    return loadDetail(userId);
+  },
+
   async setViewMode(userId, viewMode) {
     await UserPreferencesRepository.createDefaults(userId);
     await UserPreferencesRepository.updateViewMode(userId, viewMode);

@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
   parseHeuristicIntake,
+  parseHeuristicConsume,
+  stripConsumePreamble,
   splitItemChunks,
   looksLikeCollapsedMultiItem,
 } = require("../src/services/parsers/textIntakeParser.js");
@@ -46,6 +48,21 @@ const {
     ],
   );
   assert.equal(collapsed, true);
+}
+
+{
+  assert.equal(stripConsumePreamble("dê baixa em 1kg de arroz tipo 1"), "1kg de arroz tipo 1");
+  assert.equal(stripConsumePreamble("Dar baixa em 2 litros de leite"), "2 litros de leite");
+  assert.equal(stripConsumePreamble("usei 200g de queijo"), "200g de queijo");
+}
+
+{
+  const consume = parseHeuristicConsume("dê baixa em 1kg de arroz tipo 1");
+  assert.equal(consume.action, "consume");
+  assert.equal(consume.items.length, 1);
+  assert.equal(consume.items[0].name, "Arroz Tipo 1");
+  assert.equal(consume.items[0].quantity, 1);
+  assert.equal(consume.items[0].unit, "kg");
 }
 
 console.log("textIntakeParser.test.mjs: ok");

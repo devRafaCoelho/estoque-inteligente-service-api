@@ -35,6 +35,7 @@ router.patch(
   validateSchema(updateShoppingItemSchema),
   asyncHandler(ShoppingListController.updateItem),
 );
+router.delete("/items", asyncHandler(ShoppingListController.clearItems));
 router.delete("/items/:id", asyncHandler(ShoppingListController.deleteItem));
 
 module.exports = router;

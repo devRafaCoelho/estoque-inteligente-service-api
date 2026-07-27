@@ -3,14 +3,13 @@ const AppError = require("../utils/AppError");
 const env = require("../config/env");
 const logger = require("../utils/logger");
 const ChatRepository = require("../repositories/ChatRepository");
+const { buildChatContext } = require("./ChatContextService");
+const ChatToolsService = require("./ChatToolsService");
 const { ChatSessionDto, ChatMessageDto } = require("../dto/v1/chatDto");
 const { clampLimit } = require("../utils/pagination");
 
 const HISTORY_LIMIT = 40;
 const LLM_HISTORY_LIMIT = 12;
-
-const FALLBACK_REPLY =
-  "Recebi sua mensagem. Em breve consigo consultar estoque, sugerir lista de compras, propor baixas e dar dicas financeiras por aqui. Por enquanto, use as telas de Entrada, Baixa, Lista e Financeiro — ou continue conversando que eu respondo.";
 
 let client;
 
@@ -37,12 +36,69 @@ function titleFromMessage(text) {
   return clean.length > 60 ? `${clean.slice(0, 60)}…` : clean;
 }
 
-async function generateAssistantReply(historyRows, userMessage) {
+function buildSystemPrompt(contextText) {
+  return `Você é o assistente do app Estoque Inteligente (português do Brasil).
+Escolha UMA tool adequada à intenção do usuário:
+- answer: perguntas factuais (estoque, quantidades, o que está acabando)
+- propose_stock_out: usuário quer registrar consumo/baixa
+- propose_shopping_list: usuário quer saber o que comprar / atualizar lista
+- finance_tip: gastos do mês, dicas financeiras
+
+REGRAS:
+- Prefira tools em vez de inventar números.
+- Use só o contexto abaixo como verdade; não invente saldos.
+- Para baixa, passe o texto completo do usuário em propose_stock_out.text.
+
+Contexto atual do usuário:
+${contextText}`;
+}
+
+function extractLlmText(response) {
+  const message = response?.choices?.[0]?.message;
+  if (!message) return "";
+  if (typeof message.content === "string" && message.content.trim()) {
+    return message.content.trim();
+  }
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((part) => (typeof part === "string" ? part : part?.text || ""))
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
+function extractToolCalls(response) {
+  const message = response?.choices?.[0]?.message;
+  const calls = message?.tool_calls;
+  if (!Array.isArray(calls) || !calls.length) return [];
+  return calls
+    .map((call) => ({
+      id: call.id,
+      name: call.function?.name || call.name,
+      args: ChatToolsService.parseToolArgs(call.function?.arguments ?? call.arguments),
+    }))
+    .filter((call) => call.name);
+}
+
+async function runInferredTool(userId, userMessage) {
+  const inferred = ChatToolsService.inferToolFromMessage(userMessage);
+  return ChatToolsService.executeTool(userId, inferred.name, inferred.args);
+}
+
+async function generateAssistantReply(userId, historyRows, userMessage) {
+  const context = await buildChatContext(userId);
   const openai = getClient();
+
   if (!openai) {
+    const result = await runInferredTool(userId, userMessage);
     return {
-      content: FALLBACK_REPLY,
-      payload: { type: "answer", parser: "fallback" },
+      ...result,
+      payload: {
+        ...result.payload,
+        parser: "tools_heuristic",
+        contextStats: context.stats,
+      },
     };
   }
 
@@ -57,38 +113,72 @@ async function generateAssistantReply(historyRows, userMessage) {
   try {
     const response = await openai.chat.completions.create({
       model: env.AI_MODEL,
-      temperature: 0.4,
+      temperature: 0.1,
+      max_tokens: 400,
+      tools: ChatToolsService.definitions,
+      tool_choice: "auto",
       messages: [
-        {
-          role: "system",
-          content: `Você é o assistente do app Estoque Inteligente (português do Brasil).
-Nesta versão inicial você só conversa: seja breve, amigável e útil.
-NÃO invente saldos, preços ou itens do estoque do usuário.
-Se pedirem baixa, lista, financeiro ou quantidade em estoque, diga que isso chega em seguida e sugira usar as telas Entrada, Baixa, Lista de compras ou Financeiro por enquanto.
-Não use markdown pesado; respostas curtas (2–4 frases).`,
-        },
+        { role: "system", content: buildSystemPrompt(context.text) },
         ...history,
         { role: "user", content: userMessage },
       ],
     });
 
-    const content = String(response.choices?.[0]?.message?.content || "").trim();
-    if (!content) {
+    const toolCalls = extractToolCalls(response);
+    if (toolCalls.length) {
+      const primary = toolCalls[0];
+      const result = await ChatToolsService.executeTool(
+        userId,
+        primary.name,
+        primary.args,
+      );
       return {
-        content: FALLBACK_REPLY,
-        payload: { type: "answer", parser: "fallback" },
+        ...result,
+        payload: {
+          ...result.payload,
+          parser: "tools_gemini",
+          contextStats: context.stats,
+        },
       };
     }
 
+    const content = extractLlmText(response);
+    if (content) {
+      return {
+        content,
+        payload: {
+          type: "answer",
+          tool: "answer",
+          parser: "gemini",
+          contextStats: context.stats,
+        },
+      };
+    }
+
+    logger.warn("Chat IA sem tool e sem texto; usando heurística de tools");
+    const fallback = await runInferredTool(userId, userMessage);
     return {
-      content,
-      payload: { type: "answer", parser: "gemini" },
+      ...fallback,
+      payload: {
+        ...fallback.payload,
+        parser: "tools_heuristic",
+        contextStats: context.stats,
+      },
     };
   } catch (err) {
-    logger.warn("Falha no chat via IA; usando fallback", { message: err.message });
+    logger.warn("Falha no chat via IA; usando heurística de tools", {
+      message: err.message,
+      status: err.status,
+      code: err.code,
+    });
+    const fallback = await runInferredTool(userId, userMessage);
     return {
-      content: FALLBACK_REPLY,
-      payload: { type: "answer", parser: "fallback" },
+      ...fallback,
+      payload: {
+        ...fallback.payload,
+        parser: "tools_heuristic",
+        contextStats: context.stats,
+      },
     };
   }
 }
@@ -148,7 +238,7 @@ const ChatService = {
       session = await ChatRepository.touch(session.id);
     }
 
-    const replyDraft = await generateAssistantReply(existing, text);
+    const replyDraft = await generateAssistantReply(userId, existing, text);
     const assistantRow = await ChatRepository.createMessage({
       sessionId: session.id,
       role: "assistant",

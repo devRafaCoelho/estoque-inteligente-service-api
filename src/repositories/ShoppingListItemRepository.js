@@ -105,6 +105,14 @@ const ShoppingListItemRepository = {
   async delete(itemId, client = db) {
     await client.query("DELETE FROM shopping_list_items WHERE id = $1", [itemId]);
   },
+
+  async deleteAllByList(listId, client = db) {
+    const { rowCount } = await client.query(
+      "DELETE FROM shopping_list_items WHERE shopping_list_id = $1",
+      [listId],
+    );
+    return rowCount || 0;
+  },
 };
 
 module.exports = ShoppingListItemRepository;

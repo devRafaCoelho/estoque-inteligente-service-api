@@ -25,4 +25,14 @@ const StockOutDetailDto = (stockOut, items = []) => ({
   items: items.map(StockOutItemDto),
 });
 
-module.exports = { StockOutItemDto, StockOutDetailDto };
+const StockOutSummaryDto = (row) => ({
+  id: row.id,
+  source: row.source,
+  status: row.status,
+  rawInput: row.raw_input || null,
+  itemCount: Number(row.item_count) || 0,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+module.exports = { StockOutItemDto, StockOutDetailDto, StockOutSummaryDto };

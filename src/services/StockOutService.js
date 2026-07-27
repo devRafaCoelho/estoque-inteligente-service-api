@@ -5,7 +5,7 @@ const ProductMatcherService = require("./ProductMatcherService");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockOutRepository = require("../repositories/StockOutRepository");
 const StockOutItemRepository = require("../repositories/StockOutItemRepository");
-const { StockOutDetailDto } = require("../dto/v1/stockOutDto");
+const { StockOutDetailDto, StockOutSummaryDto } = require("../dto/v1/stockOutDto");
 const { assertDraftDocument } = require("../utils/draftDocument");
 const { productHintsFrom } = require("../utils/productHints");
 
@@ -45,6 +45,18 @@ async function loadDetail(userId, stockOutId, client = db) {
 }
 
 const StockOutService = {
+  async list(userId, query = {}) {
+    const status = query.status || "draft";
+    if (!["draft", "confirmed", "cancelled"].includes(status)) {
+      throw new AppError("Status inválido", 400);
+    }
+    const rows = await StockOutRepository.listByUser(userId, {
+      status,
+      limit: query.limit,
+    });
+    return rows.map(StockOutSummaryDto);
+  },
+
   async parseNaturalLanguage(userId, text) {
     const products = await ProductRepository.list(userId, { active: true });
     const productHints = productHintsFrom(products);
@@ -127,6 +139,11 @@ const StockOutService = {
     const cancelled = await StockOutRepository.updateStatus(userId, stockOutId, "cancelled");
     const items = await StockOutItemRepository.listByStockOut(stockOutId);
     return StockOutDetailDto(cancelled, items);
+  },
+
+  async clearDrafts(userId) {
+    const cleared = await StockOutRepository.cancelAllByStatus(userId, "draft");
+    return { cleared };
   },
 };
 

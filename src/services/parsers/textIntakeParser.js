@@ -220,6 +220,37 @@ function parseChunk(chunk) {
 }
 
 /**
+ * Remove acentos para matching de palavras (\\b do JS não trata bem "ê"/"ç").
+ */
+function foldAccents(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+/**
+ * Remove verbos/preâmbulos de consumo antes do parse de baixa.
+ * Ex.: "dê baixa em 1kg de arroz tipo 1" → "1kg de arroz tipo 1"
+ */
+function stripConsumePreamble(text) {
+  let cleaned = foldAccents(String(text || ""));
+
+  cleaned = cleaned
+    .replace(
+      /(?:^|[\s,;])(?:por\s+favor[,.]?\s*)?(?:(?:de|dar|dei|vamos)\s+)?(?:baixa|baixar|baixe)(?:\s+em)?\b/gi,
+      " ",
+    )
+    .replace(/\b(usei|consumi|consumir|consumo)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // sobra "de/em" soltos no início após remover "dê baixa em"
+  cleaned = cleaned.replace(/^(?:de|em|do|da|dos|das)\s+/i, "").trim();
+
+  return cleaned || String(text || "").trim();
+}
+
+/**
  * Parser heurístico local (Etapa 1).
  * Exemplos aceitos:
  * - "2kg arroz, 1 leite, 500g feijão"
@@ -243,6 +274,19 @@ function parseHeuristicIntake(text) {
     action: "add",
     parser: "heuristic",
     items,
+  };
+}
+
+/**
+ * Parser heurístico de baixa (espelha intake, remove verbos de consumo).
+ */
+function parseHeuristicConsume(text) {
+  const cleaned = stripConsumePreamble(text);
+  const parsed = parseHeuristicIntake(cleaned || text);
+  return {
+    action: "consume",
+    parser: "heuristic",
+    items: parsed.items,
   };
 }
 
@@ -272,6 +316,8 @@ module.exports = {
   normalizeUnit,
   guessCategory,
   parseHeuristicIntake,
+  parseHeuristicConsume,
+  stripConsumePreamble,
   splitItemChunks,
   looksLikeCollapsedMultiItem,
 };

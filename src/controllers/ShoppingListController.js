@@ -26,6 +26,11 @@ const ShoppingListController = {
     return res.status(200).json(result);
   },
 
+  async clearItems(req, res) {
+    const list = await ShoppingListService.clearItems(req.user.id);
+    return res.status(200).json({ list });
+  },
+
   async setViewMode(req, res) {
     const list = await ShoppingListService.setViewMode(req.user.id, req.body.viewMode);
     return res.status(200).json({ list });

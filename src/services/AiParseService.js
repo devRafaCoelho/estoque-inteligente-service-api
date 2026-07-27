@@ -6,6 +6,7 @@ const logger = require("../utils/logger");
 const { CATEGORIES, UNITS } = require("../schemas/productSchemas");
 const {
   parseHeuristicIntake,
+  parseHeuristicConsume,
   normalizeUnit,
   guessCategory,
   looksLikeCollapsedMultiItem,
@@ -136,23 +137,6 @@ async function parseWithLlm(action, text, productHints = []) {
     throw new Error(`JSON inválido do modelo: ${error.message}`);
   }
   return { ...value, parser: "gemini" };
-}
-
-/**
- * Parser heurístico de baixa (espelha intake, remove verbos de consumo).
- */
-function parseHeuristicConsume(text) {
-  const cleaned = String(text)
-    .replace(/\b(dê|de|dar|dei|usei|consumi|baixe|baixa|baixar)\b/gi, " ")
-    .replace(/\bem\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const parsed = parseHeuristicIntake(cleaned || text);
-  return {
-    action: "consume",
-    parser: "heuristic",
-    items: parsed.items,
-  };
 }
 
 async function parseWithFallback(action, text, productHints = []) {
