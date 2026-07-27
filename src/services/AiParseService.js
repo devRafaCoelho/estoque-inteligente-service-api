@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const Joi = require("joi");
 const OpenAI = require("openai");
 const AppError = require("../utils/AppError");
@@ -27,6 +29,7 @@ const parsedItemSchema = Joi.object({
 
 const parsedPayloadSchema = Joi.object({
   action: Joi.string().valid("add", "consume").required(),
+  storeName: Joi.string().max(200).allow(null, ""),
   items: Joi.array().items(parsedItemSchema).min(1).required(),
 });
 
@@ -70,6 +73,27 @@ function normalizeParsedItems(items) {
   }));
 }
 
+function validateParsedPayload(action, json, parser) {
+  const storeName =
+    json.storeName != null && String(json.storeName).trim()
+      ? String(json.storeName).trim().slice(0, 200)
+      : null;
+
+  const normalized = {
+    action,
+    storeName,
+    items: normalizeParsedItems(json.items || []),
+  };
+  const { value, error } = parsedPayloadSchema.validate(normalized, {
+    abortEarly: false,
+    stripUnknown: true,
+  });
+  if (error) {
+    throw new Error(`JSON inválido do modelo: ${error.message}`);
+  }
+  return { ...value, parser };
+}
+
 function buildPrompt(action, text, productHints = []) {
   const actionLabel = action === "consume" ? "consumo/baixa de estoque" : "compra/entrada de estoque";
   const hints =
@@ -107,6 +131,34 @@ Texto do usuário:
 """${text}"""`;
 }
 
+function buildReceiptImagePrompt(productHints = []) {
+  const hints =
+    productHints.length > 0
+      ? `\nProdutos já cadastrados do usuário (prefira nomes próximos quando o cupom for ambíguo):\n- ${productHints.join("\n- ")}\n`
+      : "";
+
+  return `Você lê cupons fiscais / notas / listas de compra fotografados (português do Brasil) e extrai itens de estoque doméstico.
+
+Unidades permitidas: ${UNITS.join(", ")}
+Categorias permitidas: ${CATEGORIES.join(", ")}
+Aliases: lata→can, garrafa→bottle, pacote/pct→pack, caixa→box, litro→l, gramas→g, quilo→kg.
+
+Responda APENAS com JSON válido, sem markdown:
+{"action":"add","storeName":"Nome do mercado ou null","items":[{"name":"Arroz","quantity":1,"unit":"kg","category":"grocery","unitPrice":12.9,"confidence":0.85}]}
+
+Regras:
+- action deve ser "add"
+- Um produto por item; ignore totais, CNPJ, formas de pagamento e impostos
+- name curto e legível (sem código de barras longo); se o cupom tiver descrição truncada, normalize
+- quantity > 0; se só aparecer o valor unitário sem quantidade, use quantity 1 e unit "un"
+- unitPrice: preço unitário em reais se legível, senão null
+- se unidade não ficar clara, use "un"
+- se categoria não ficar clara, use "other"
+- confidence menor se a linha estiver borrada ou ambígua
+- se a imagem for ilegível, não for um cupom/lista, ou não houver itens: {"action":"add","storeName":null,"items":[]}
+${hints}`;
+}
+
 async function parseWithLlm(action, text, productHints = []) {
   const openai = getClient();
   if (!openai) return null;
@@ -125,18 +177,7 @@ async function parseWithLlm(action, text, productHints = []) {
 
   const content = response.choices?.[0]?.message?.content;
   const json = extractJson(content);
-  const normalized = {
-    action,
-    items: normalizeParsedItems(json.items || []),
-  };
-  const { value, error } = parsedPayloadSchema.validate(normalized, {
-    abortEarly: false,
-    stripUnknown: true,
-  });
-  if (error) {
-    throw new Error(`JSON inválido do modelo: ${error.message}`);
-  }
-  return { ...value, parser: "gemini" };
+  return validateParsedPayload(action, json, "gemini");
 }
 
 async function parseWithFallback(action, text, productHints = []) {
@@ -186,6 +227,101 @@ async function parseWithFallback(action, text, productHints = []) {
   return heuristic;
 }
 
+/**
+ * @param {{ absolutePath: string, mimeType: string, productHints?: string[] }} opts
+ */
+async function parseIntakeFromImage({ absolutePath, mimeType, productHints = [] }) {
+  if (!isAiConfigured()) {
+    throw new AppError(
+      "Leitura de cupom por foto exige IA configurada (AI_API_KEY).",
+      503,
+    );
+  }
+
+  const resolved = path.resolve(absolutePath);
+  if (!fs.existsSync(resolved)) {
+    throw new AppError("Arquivo da imagem não encontrado no servidor", 500);
+  }
+
+  const openai = getClient();
+  const bytes = fs.readFileSync(resolved);
+  const dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+
+  let content;
+  try {
+    const response = await openai.chat.completions.create({
+      model: env.AI_MODEL,
+      temperature: 0.1,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Você extrai itens de cupom/nota para estoque doméstico. Responda somente JSON válido.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildReceiptImagePrompt(productHints) },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    });
+    content = response.choices?.[0]?.message?.content;
+  } catch (err) {
+    logger.warn("Falha na visão/OCR do cupom", {
+      message: err.message,
+      status: err.status,
+    });
+    if (err.status === 404) {
+      throw new AppError(
+        "Modelo de IA indisponível para visão. Verifique AI_MODEL (ex.: gemini-flash-latest).",
+        503,
+      );
+    }
+    if (err.status === 429) {
+      throw new AppError(
+        "Limite da IA atingido. Aguarde um pouco e tente de novo.",
+        429,
+      );
+    }
+    throw new AppError(
+      "Não consegui ler a foto agora. Tente outra imagem ou use entrada por texto.",
+      422,
+      { cause: err.message },
+    );
+  }
+
+  let json;
+  try {
+    json = extractJson(content);
+  } catch (err) {
+    logger.warn("Resposta de visão sem JSON válido", { message: err.message });
+    throw new AppError(
+      "Não entendi o cupom nesta foto. Tire outra (mais nítida e de perto) ou use texto.",
+      422,
+    );
+  }
+
+  const items = Array.isArray(json.items) ? json.items : [];
+  if (!items.length) {
+    throw new AppError(
+      "Não encontrei itens nesta foto. Confira se é um cupom legível ou use entrada por texto.",
+      422,
+    );
+  }
+
+  try {
+    return validateParsedPayload("add", json, "vision");
+  } catch (err) {
+    logger.warn("JSON de visão inválido no schema", { message: err.message });
+    throw new AppError(
+      "Não consegui estruturar os itens do cupom. Tente outra foto ou use texto.",
+      422,
+    );
+  }
+}
+
 const AiParseService = {
   isConfigured: isAiConfigured,
 
@@ -195,6 +331,10 @@ const AiParseService = {
 
   async parseConsume(text, { productHints = [] } = {}) {
     return parseWithFallback("consume", text, productHints);
+  },
+
+  async parseIntakeFromImage(opts) {
+    return parseIntakeFromImage(opts);
   },
 };
 

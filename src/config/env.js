@@ -19,10 +19,13 @@ const schema = Joi.object({
   AI_BASE_URL: Joi.string()
     .allow("")
     .default("https://generativelanguage.googleapis.com/v1beta/openai/"),
-  AI_MODEL: Joi.string().allow("").default("gemini-2.5-flash"),
+  AI_MODEL: Joi.string().allow("").default("gemini-flash-latest"),
   // Rate limit diário de IA (0 = desligado). Contadores em memória (v1).
   AI_PARSE_DAILY_LIMIT: Joi.number().integer().min(0).default(50),
   AI_CHAT_DAILY_LIMIT: Joi.number().integer().min(0).default(40),
+  // Upload de cupom (parse-image)
+  UPLOAD_DIR: Joi.string().default("uploads"),
+  UPLOAD_MAX_MB: Joi.number().integer().min(1).max(20).default(8),
 }).unknown(true);
 
 const { value, error } = schema.validate(process.env);

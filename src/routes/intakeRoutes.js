@@ -4,6 +4,7 @@ const validateSchema = require("../middlewares/validateSchema");
 const validateAuthentication = require("../middlewares/validateAuthentication");
 const asyncHandler = require("../utils/asyncHandler");
 const aiRateLimit = require("../middlewares/aiRateLimit");
+const uploadReceiptImage = require("../middlewares/uploadReceipt");
 const {
   parseNaturalLanguageSchema,
   updateIntakeSchema,
@@ -21,6 +22,12 @@ router.post(
   aiRateLimit("parse"),
   validateSchema(parseNaturalLanguageSchema),
   asyncHandler(IntakeController.parseText),
+);
+router.post(
+  "/parse-image",
+  aiRateLimit("parse"),
+  uploadReceiptImage,
+  asyncHandler(IntakeController.parseImage),
 );
 router.get("/:id", asyncHandler(IntakeController.get));
 router.patch(

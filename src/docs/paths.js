@@ -802,8 +802,8 @@ const paths = {
       tags: ["Intakes"],
       summary: "Parse texto → draft de compra",
       description:
-        "Etapa 1 usa parser heurístico (sem OpenAI). " +
-        'Ex.: "2kg arroz, 1 leite, 500g feijão".',
+        'Texto livre → draft. Ex.: "2kg arroz, 1 leite, 500g feijão". ' +
+        "Conta na cota diária de parse (mesma de parse-image e stock-outs/parse-text).",
       requestBody: {
         required: true,
         content: {
@@ -828,6 +828,57 @@ const paths = {
         },
         401: { $ref: "#/components/responses/Unauthorized" },
         422: { $ref: "#/components/responses/BadRequest" },
+        429: { $ref: "#/components/responses/BadRequest" },
+      },
+    },
+  },
+
+  "/api/intakes/parse-image": {
+    post: {
+      tags: ["Intakes"],
+      summary: "Upload de foto → draft de compra (receipt_photo)",
+      description:
+        "Multipart campo `image` (JPG/PNG/WebP). Visão/LLM (Gemini) extrai itens no mesmo schema do parse-text, " +
+        "faz matching e cria draft `source: receipt_photo` com `parser: vision`. Exige `AI_API_KEY`. " +
+        "Conta na cota diária de parse (mesma de parse-text).",
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["image"],
+              properties: {
+                image: {
+                  type: "string",
+                  format: "binary",
+                  description: "Foto do cupom/nota (jpg, png ou webp)",
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: "Draft criado com itens no preview",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  intake: { $ref: "#/components/schemas/Intake" },
+                },
+              },
+            },
+          },
+        },
+        400: { $ref: "#/components/responses/BadRequest" },
+        401: { $ref: "#/components/responses/Unauthorized" },
+        413: { $ref: "#/components/responses/BadRequest" },
+        422: { $ref: "#/components/responses/BadRequest" },
+        429: { $ref: "#/components/responses/BadRequest" },
+        503: { $ref: "#/components/responses/BadRequest" },
       },
     },
   },

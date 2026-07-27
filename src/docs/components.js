@@ -323,9 +323,18 @@ module.exports = {
         type: "object",
         properties: {
           id: { type: "string", format: "uuid" },
-          source: { type: "string", example: "natural_language" },
+          source: {
+            type: "string",
+            example: "natural_language",
+            description: "natural_language | nf_qr | receipt_photo | manual | chat",
+          },
           status: { type: "string", enum: ["draft", "confirmed", "cancelled"] },
           rawInput: { type: "string", nullable: true },
+          mediaUrl: {
+            type: "string",
+            nullable: true,
+            description: "Caminho relativo do arquivo (ex.: receipts/{userId}/{file}.jpg)",
+          },
           storeName: { type: "string", nullable: true },
           parser: { type: "string", nullable: true, example: "heuristic" },
           confirmedAt: { type: "string", format: "date-time", nullable: true },

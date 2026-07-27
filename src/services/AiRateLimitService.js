@@ -28,7 +28,7 @@ function messageFor(kind, limit) {
   if (kind === KINDS.chat) {
     return `Você atingiu o limite diário do assistente (${limit} mensagens). Tente novamente amanhã.`;
   }
-  return `Você atingiu o limite diário de interpretações por texto (${limit}). Tente novamente amanhã.`;
+  return `Você atingiu o limite diário de interpretações (${limit}: texto e foto). Tente novamente amanhã.`;
 }
 
 function getCount(key) {

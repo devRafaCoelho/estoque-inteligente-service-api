@@ -18,6 +18,7 @@ const IntakeDetailDto = (intake, items = []) => ({
   status: intake.status,
   rawInput: intake.raw_input || null,
   stateCode: intake.state_code || null,
+  mediaUrl: intake.media_url || null,
   storeName: intake.raw_payload?.storeName || null,
   errorMessage: intake.error_message || null,
   parser: intake.raw_payload?.parser || null,

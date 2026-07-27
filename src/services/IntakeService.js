@@ -1,5 +1,7 @@
 const db = require("../config/db");
+const fs = require("fs");
 const AppError = require("../utils/AppError");
+const { relativeReceiptPath, absoluteFromRelative } = require("../config/storage");
 const AiParseService = require("./AiParseService");
 const ProductMatcherService = require("./ProductMatcherService");
 const ProductRepository = require("../repositories/ProductRepository");
@@ -8,12 +10,22 @@ const StockIntakeItemRepository = require("../repositories/StockIntakeItemReposi
 const { IntakeDetailDto, IntakeSummaryDto } = require("../dto/v1/intakeDto");
 const { assertDraftDocument } = require("../utils/draftDocument");
 const { productHintsFrom } = require("../utils/productHints");
+const logger = require("../utils/logger");
 
 async function loadDetail(userId, intakeId, client = db) {
   const intake = await StockIntakeRepository.findById(userId, intakeId, client);
   if (!intake) throw new AppError("Entrada não encontrada", 404);
   const items = await StockIntakeItemRepository.listByIntake(intakeId, client);
   return IntakeDetailDto(intake, items);
+}
+
+function safeUnlink(absolutePath) {
+  if (!absolutePath) return;
+  try {
+    if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+  } catch (err) {
+    logger.warn("Falha ao remover arquivo de cupom", { message: err.message });
+  }
 }
 
 const IntakeService = {
@@ -57,6 +69,76 @@ const IntakeService = {
       const items = await StockIntakeItemRepository.createMany(intake.id, matched, client);
       return IntakeDetailDto(intake, items);
     });
+  },
+
+  /**
+   * Foto do cupom → visão/LLM (mesmo schema do parse de texto) → draft com itens.
+   *
+   * @param {string} userId
+   * @param {Express.Multer.File | undefined} file
+   * @param {string | null} [relativeMediaPath]
+   */
+  async parseReceiptPhoto(userId, file, relativeMediaPath = null) {
+    if (!file) {
+      throw new AppError("Envie uma imagem no campo image (JPG, PNG ou WebP)", 400);
+    }
+
+    const mediaUrl =
+      relativeMediaPath ||
+      (file.filename ? relativeReceiptPath(userId, file.filename) : null);
+    if (!mediaUrl) {
+      throw new AppError("Falha ao gravar a imagem do cupom", 500);
+    }
+
+    const absolutePath = file.path || absoluteFromRelative(mediaUrl);
+    const products = await ProductRepository.list(userId, { active: true });
+    const productHints = productHintsFrom(products);
+
+    let parsed;
+    try {
+      parsed = await AiParseService.parseIntakeFromImage({
+        absolutePath,
+        mimeType: file.mimetype || "image/jpeg",
+        productHints,
+      });
+    } catch (err) {
+      safeUnlink(absolutePath);
+      throw err;
+    }
+
+    try {
+      return await db.withTransaction(async (client) => {
+        const matched = await ProductMatcherService.matchItems(userId, parsed.items, client);
+
+        const intake = await StockIntakeRepository.create(
+          {
+            userId,
+            source: "receipt_photo",
+            status: "draft",
+            rawInput: file.originalname || null,
+            mediaUrl,
+            rawPayload: {
+              parser: parsed.parser || "vision",
+              action: parsed.action,
+              storeName: parsed.storeName || null,
+              modelItems: parsed.items,
+              mimeType: file.mimetype,
+              originalName: file.originalname || null,
+              sizeBytes: file.size,
+              storedFilename: file.filename,
+              aiConfigured: true,
+            },
+          },
+          client,
+        );
+
+        const items = await StockIntakeItemRepository.createMany(intake.id, matched, client);
+        return IntakeDetailDto(intake, items);
+      });
+    } catch (err) {
+      safeUnlink(absolutePath);
+      throw err;
+    }
   },
 
   async get(userId, intakeId) {

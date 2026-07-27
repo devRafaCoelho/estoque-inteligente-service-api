@@ -3,15 +3,31 @@ const { clampLimit } = require("../utils/pagination");
 
 const StockIntakeRepository = {
   async create(
-    { userId, source, status = "draft", rawInput = null, rawPayload = {}, stateCode = null },
+    {
+      userId,
+      source,
+      status = "draft",
+      rawInput = null,
+      rawPayload = {},
+      stateCode = null,
+      mediaUrl = null,
+    },
     client = db,
   ) {
     const { rows } = await client.query(
       `INSERT INTO stock_intakes
-         (user_id, source, status, raw_input, raw_payload, state_code)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+         (user_id, source, status, raw_input, raw_payload, state_code, media_url)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
        RETURNING *`,
-      [userId, source, status, rawInput, JSON.stringify(rawPayload || {}), stateCode],
+      [
+        userId,
+        source,
+        status,
+        rawInput,
+        JSON.stringify(rawPayload || {}),
+        stateCode,
+        mediaUrl,
+      ],
     );
     return rows[0];
   },

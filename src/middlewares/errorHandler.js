@@ -13,6 +13,17 @@ function errorHandler(err, req, res, _next) {
     });
   }
 
+  // Multer (upload) — rede de segurança se escapar do middleware
+  if (err?.name === "MulterError" || err?.code === "LIMIT_FILE_SIZE") {
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    return res.status(status).json({
+      error:
+        err.code === "LIMIT_FILE_SIZE"
+          ? "Imagem muito grande"
+          : err.message || "Falha no upload",
+    });
+  }
+
   // Erros de constraint do PostgreSQL comuns
   if (err.code === "23505") {
     return res.status(409).json({ error: "Registro duplicado", details: err.detail });

@@ -98,6 +98,7 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | POST | `/api/intakes/parse-text` | Texto → draft de compra (rate limit parse) |
+| POST | `/api/intakes/parse-image` | Multipart `image` → visão/LLM → draft `receipt_photo` com itens |
 | GET | `/api/intakes` | Listar (ex.: `status=draft`) |
 | POST | `/api/intakes/clear-drafts` | Limpar rascunhos |
 | GET | `/api/intakes/:id` | Preview do draft |
@@ -160,14 +161,22 @@ Com `AI_API_KEY` (Gemini Flash no [AI Studio](https://aistudio.google.com/app/ap
 ```env
 AI_API_KEY=sua-chave
 AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-AI_MODEL=gemini-2.5-flash
+AI_MODEL=gemini-flash-latest
 
-# Cotas diárias por usuário (0 = desligado). Parse = entrada+baixa; chat separado.
+# Cotas diárias por usuário (0 = desligado). Parse = entrada+baixa+imagem; chat separado.
 AI_PARSE_DAILY_LIMIT=50
 AI_CHAT_DAILY_LIMIT=40
+
+# Upload de cupom (parse-image)
+UPLOAD_DIR=uploads
+UPLOAD_MAX_MB=8
 ```
 
 Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com o processo).
+
+**Cota `parse` (F2-4.3):** compartilhada entre `POST /api/intakes/parse-text`, `POST /api/intakes/parse-image` e `POST /api/stock-outs/parse-text` — texto e foto somam no mesmo limite diário (`AI_PARSE_DAILY_LIMIT`). Chat usa cota separada.
+
+`parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision` e itens no preview. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422** (arquivo removido).
 
 ## OAuth (Google / Apple)
 
@@ -177,4 +186,4 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 ## Fora desta entrega
 
-OCR/foto (`parse-image`), QR NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+UI de foto na `/entrada` (F2-4.4), QR NF-e, filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.

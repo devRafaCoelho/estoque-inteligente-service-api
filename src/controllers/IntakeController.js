@@ -12,6 +12,15 @@ const IntakeController = {
     return res.status(201).json({ intake });
   },
 
+  async parseImage(req, res) {
+    const intake = await IntakeService.parseReceiptPhoto(
+      req.user.id,
+      req.file,
+      req.receiptRelativePath || null,
+    );
+    return res.status(201).json({ intake });
+  },
+
   async get(req, res) {
     const intake = await IntakeService.get(req.user.id, req.params.id);
     return res.status(200).json({ intake });
