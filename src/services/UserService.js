@@ -2,6 +2,7 @@ const AppError = require("../utils/AppError");
 const UserRepository = require("../repositories/UserRepository");
 const UserAuthIdentityRepository = require("../repositories/UserAuthIdentityRepository");
 const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
+const PushSubscriptionRepository = require("../repositories/PushSubscriptionRepository");
 const { hashPassword, comparePassword } = require("../helpers/hashPassword");
 const { UserDto } = require("../dto/v1/userDto");
 const { UserPreferencesDto } = require("../dto/v1/userPreferencesDto");
@@ -22,6 +23,12 @@ const UserService = {
       prefs = await UserPreferencesRepository.findByUser(userId);
     }
     if (!prefs) throw new AppError("Preferências não encontradas", 404);
+    const subscriptions = await PushSubscriptionRepository.countByUser(userId);
+    if (Boolean(prefs.push_enabled) !== (subscriptions > 0)) {
+      prefs = await UserPreferencesRepository.update(userId, {
+        pushEnabled: subscriptions > 0,
+      });
+    }
     return UserPreferencesDto(prefs);
   },
 

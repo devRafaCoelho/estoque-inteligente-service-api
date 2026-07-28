@@ -14,6 +14,7 @@ const schema = Joi.object({
   APPLE_CLIENT_ID: Joi.string().allow("").default(""),
   APPLE_TEAM_ID: Joi.string().allow("").default(""),
   APPLE_KEY_ID: Joi.string().allow("").default(""),
+  APP_URL: Joi.string().uri().default("http://localhost:5173"),
   // IA — Gemini via endpoint compatível OpenAI (fallback heurístico se vazio)
   AI_API_KEY: Joi.string().allow("").default(""),
   AI_BASE_URL: Joi.string()
@@ -29,6 +30,16 @@ const schema = Joi.object({
   // NF-e / NFC-e (Sprint 5) — UFs com adapter de QR
   NF_PRIORITY_STATES: Joi.string().default("SP,MG,BA"),
   NF_MOCK_COLLECTOR: Joi.boolean().truthy("true").falsy("false").default(false),
+  SMTP_HOST: Joi.string().allow("").default(""),
+  SMTP_PORT: Joi.number().integer().min(1).max(65535).default(587),
+  SMTP_SECURE: Joi.boolean().truthy("true").falsy("false").default(false),
+  SMTP_USER: Joi.string().allow("").default(""),
+  SMTP_PASS: Joi.string().allow("").default(""),
+  EMAIL_FROM: Joi.string().email().default("noreply@estoque-inteligente.local"),
+  EMAIL_PREVIEW_DIR: Joi.string().default("tmp/email-previews"),
+  VAPID_PUBLIC_KEY: Joi.string().allow("").default(""),
+  VAPID_PRIVATE_KEY: Joi.string().allow("").default(""),
+  VAPID_SUBJECT: Joi.string().default("mailto:noreply@estoque-inteligente.local"),
 }).unknown(true);
 
 const { value, error } = schema.validate(process.env);

@@ -194,6 +194,11 @@ CREATE TABLE user_preferences (
   consumption_nudge_days      INTEGER NOT NULL DEFAULT 5
     CHECK (consumption_nudge_days BETWEEN 1 AND 30),
   push_enabled                BOOLEAN NOT NULL DEFAULT FALSE,
+  quiet_hours_enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+  quiet_hours_start           TIME NOT NULL DEFAULT '22:00',
+  quiet_hours_end             TIME NOT NULL DEFAULT '08:00',
+  quiet_hours_timezone        VARCHAR(60) NOT NULL DEFAULT 'America/Sao_Paulo',
+  last_email_digest_at        TIMESTAMPTZ,
   shopping_list_view_mode     VARCHAR(20) NOT NULL DEFAULT 'paper',
     -- list | paper | table (table só faz sentido no client desktop)
   currency                    CHAR(3) NOT NULL DEFAULT 'BRL',
@@ -451,6 +456,19 @@ CREATE TABLE notifications (
 CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 CREATE INDEX idx_notifications_unread ON notifications (user_id)
   WHERE read_at IS NULL;
+
+CREATE TABLE push_subscriptions (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  endpoint      TEXT NOT NULL UNIQUE,
+  p256dh_key    TEXT NOT NULL,
+  auth_key      TEXT NOT NULL,
+  user_agent    TEXT,
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_push_subscriptions_user ON push_subscriptions (user_id, created_at DESC);
 
 -- -------------------------------------------------------------
 -- 8. Chat (assistente IA)

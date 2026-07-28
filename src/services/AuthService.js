@@ -6,6 +6,10 @@ const UserAuthIdentityRepository = require("../repositories/UserAuthIdentityRepo
 const { hashPassword, comparePassword } = require("../helpers/hashPassword");
 const { signToken } = require("../helpers/signToken");
 const { UserDto } = require("../dto/v1/userDto");
+const EmailService = require("./EmailService");
+const PasswordResetService = require("./PasswordResetService");
+const { welcomeEmail } = require("../mail/emailLayout");
+const { buildDisplayName } = require("../helpers/personName");
 
 const AuthService = {
   issueSession(user, { isNewUser = false, authProviders = ["local"] } = {}) {
@@ -14,7 +18,8 @@ const AuthService = {
   },
 
   async register({ firstName, lastName, name, email, password, defaultState }) {
-    const existing = await UserRepository.findByEmail(email);
+    const normalizedEmail = String(email).toLowerCase();
+    const existing = await UserRepository.findByEmail(normalizedEmail);
     if (existing) {
       throw new AppError("E-mail já cadastrado", 409);
     }
@@ -27,7 +32,7 @@ const AuthService = {
           firstName: firstName || undefined,
           lastName: lastName || null,
           name,
-          email,
+          email: normalizedEmail,
           passwordHash,
           defaultState: defaultState || null,
         },
@@ -47,11 +52,20 @@ const AuthService = {
       return created;
     });
 
+    const mail = welcomeEmail({
+      firstName: user.first_name || buildDisplayName(user).split(/\s+/)[0],
+      provider: "local",
+    });
+    await EmailService.send({
+      to: user.email,
+      ...mail,
+    });
+
     return this.issueSession(user, { isNewUser: true, authProviders: ["local"] });
   },
 
   async login({ email, password }) {
-    const user = await UserRepository.findByEmail(email);
+    const user = await UserRepository.findByEmail(String(email).toLowerCase());
     if (!user || user.status === "deleted") {
       throw new AppError("Credenciais inválidas", 401);
     }
@@ -82,6 +96,14 @@ const AuthService = {
     const OAuthService = require("./OAuthService");
     const authProviders = await OAuthService.listAuthProviders(user.id, user);
     return UserDto(user, authProviders);
+  },
+
+  forgotPassword(payload) {
+    return PasswordResetService.request(payload.email);
+  },
+
+  resetPassword(payload) {
+    return PasswordResetService.reset(payload);
   },
 };
 

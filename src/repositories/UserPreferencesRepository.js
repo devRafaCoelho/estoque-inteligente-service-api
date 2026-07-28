@@ -37,7 +37,13 @@ const UserPreferencesRepository = {
       notifyConsumptionNudge: "notify_consumption_nudge",
       notifyEmailDigest: "notify_email_digest",
       consumptionNudgeDays: "consumption_nudge_days",
+      pushEnabled: "push_enabled",
+      quietHoursEnabled: "quiet_hours_enabled",
+      quietHoursStart: "quiet_hours_start",
+      quietHoursEnd: "quiet_hours_end",
+      quietHoursTimezone: "quiet_hours_timezone",
       shoppingListViewMode: "shopping_list_view_mode",
+      lastEmailDigestAt: "last_email_digest_at",
     };
     const sets = [];
     const values = [];
@@ -57,6 +63,17 @@ const UserPreferencesRepository = {
        WHERE user_id = $${i}
        RETURNING *`,
       values,
+    );
+    return rows[0] || null;
+  },
+
+  async touchDigestSentAt(userId, client = db) {
+    const { rows } = await client.query(
+      `UPDATE user_preferences
+       SET last_email_digest_at = NOW(), updated_at = NOW()
+       WHERE user_id = $1
+       RETURNING *`,
+      [userId],
     );
     return rows[0] || null;
   },

@@ -7,4 +7,21 @@ const listNotificationsSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional(),
 });
 
-module.exports = { listNotificationsSchema };
+const pushSubscriptionSchema = Joi.object({
+  endpoint: Joi.string().uri().required(),
+  expirationTime: Joi.allow(null),
+  keys: Joi.object({
+    p256dh: Joi.string().required(),
+    auth: Joi.string().required(),
+  }).required(),
+});
+
+const deletePushSubscriptionSchema = Joi.object({
+  endpoint: Joi.string().uri().required(),
+});
+
+module.exports = {
+  listNotificationsSchema,
+  pushSubscriptionSchema,
+  deletePushSubscriptionSchema,
+};

@@ -7,6 +7,9 @@ const { UserDto } = require("../dto/v1/userDto");
 const AuthService = require("./AuthService");
 const GoogleAuthService = require("./GoogleAuthService");
 const AppleAuthService = require("./AppleAuthService");
+const EmailService = require("./EmailService");
+const { welcomeEmail } = require("../mail/emailLayout");
+const { buildDisplayName } = require("../helpers/personName");
 
 function resolveDisplayName({ name, email, provider }) {
   if (name && String(name).trim()) return String(name).trim().slice(0, 150);
@@ -100,6 +103,18 @@ const OAuthService = {
 
       return { user: userRow, isNewUser: created, authProviders };
     });
+
+    if (isNewUser) {
+      const provider = authProviders.includes("google") ? "google" : "apple";
+      const mail = welcomeEmail({
+        firstName: user.first_name || buildDisplayName(user).split(/\s+/)[0],
+        provider,
+      });
+      await EmailService.send({
+        to: user.email,
+        ...mail,
+      });
+    }
 
     return AuthService.issueSession(user, { isNewUser, authProviders });
   },

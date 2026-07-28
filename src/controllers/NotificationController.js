@@ -20,6 +20,25 @@ const NotificationController = {
     const result = await NotificationService.markAllRead(req.user.id);
     return res.status(200).json(result);
   },
+
+  async pushConfig(req, res) {
+    const result = await NotificationService.getPushConfig(req.user.id);
+    return res.status(200).json(result);
+  },
+
+  async subscribe(req, res) {
+    const result = await NotificationService.subscribe(
+      req.user.id,
+      req.body,
+      req.get("user-agent") || null,
+    );
+    return res.status(200).json(result);
+  },
+
+  async unsubscribe(req, res) {
+    const result = await NotificationService.unsubscribe(req.user.id, req.body.endpoint);
+    return res.status(200).json(result);
+  },
 };
 
 module.exports = NotificationController;

@@ -65,7 +65,12 @@ const updatePreferencesSchema = Joi.object({
   notifyRepurchase: Joi.boolean(),
   notifyConsumptionNudge: Joi.boolean(),
   notifyEmailDigest: Joi.boolean(),
+  pushEnabled: Joi.boolean(),
   consumptionNudgeDays: Joi.number().integer().min(1).max(30),
+  quietHoursEnabled: Joi.boolean(),
+  quietHoursStart: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/),
+  quietHoursEnd: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/),
+  quietHoursTimezone: Joi.string().max(60),
   shoppingListViewMode: Joi.string().valid("list", "paper"),
 }).min(1);
 

@@ -27,6 +27,16 @@ const AuthController = {
     return res.status(200).json(result);
   },
 
+  async forgotPassword(req, res) {
+    const result = await AuthService.forgotPassword(req.body);
+    return res.status(200).json(result);
+  },
+
+  async resetPassword(req, res) {
+    const result = await AuthService.resetPassword(req.body);
+    return res.status(200).json(result);
+  },
+
   async linkGoogle(req, res) {
     const result = await OAuthService.linkGoogle(req.user.id, req.body.idToken);
     return res.status(200).json(result);

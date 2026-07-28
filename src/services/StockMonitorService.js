@@ -3,6 +3,7 @@ const ProductRepository = require("../repositories/ProductRepository");
 const NotificationRepository = require("../repositories/NotificationRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const ConsumptionEstimateService = require("./ConsumptionEstimateService");
+const NotificationDispatchService = require("./NotificationDispatchService");
 const stockStatus = require("../utils/stockStatus");
 const { isRepurchaseDue, MS_PER_DAY } = require("../utils/stockRules");
 const logger = require("../utils/logger");
@@ -32,7 +33,7 @@ async function ensureStockAlert(userId, { type, product, title, body }) {
   );
   if (existing) return false;
 
-  await NotificationRepository.create({
+  await NotificationDispatchService.createNotification({
     userId,
     type,
     title,
@@ -68,7 +69,7 @@ async function ensureRepurchaseReminder(userId, product) {
       ? `Já passou o intervalo de ${cycle} dias para repor "${product.name}".`
       : `A última vez que você comprou "${product.name}" foi há ${elapsed} dia${elapsed === 1 ? "" : "s"} (ciclo de ${cycle} dias).`;
 
-  await NotificationRepository.create({
+  await NotificationDispatchService.createNotification({
     userId,
     type: "repurchase_reminder",
     title: `${product.name}: recompra sugerida`,
@@ -126,7 +127,7 @@ async function ensureMissingConsumptionNudge(userId, prefs) {
       ? `Você costuma registrar baixa em "${overdue[0].name}" com mais frequência — faz ${overdue[0].daysSinceLastOut} dia${overdue[0].daysSinceLastOut === 1 ? "" : "s"} sem movimento.`
       : `${formatOverdueNames(overdue)} estão além do intervalo usual de consumo. Quer registrar o que usou?`;
 
-  await NotificationRepository.create({
+  await NotificationDispatchService.createNotification({
     userId,
     type: "missing_consumption",
     title,
@@ -168,7 +169,7 @@ async function ensureConsumptionNudge(userId, prefs) {
     ? `Faz ${days} dias sem nenhuma baixa no estoque — quer revisar o que usou?`
     : `Você ainda não registrou baixas. Quando consumir algo, registre para manter o estoque atualizado.`;
 
-  await NotificationRepository.create({
+  await NotificationDispatchService.createNotification({
     userId,
     type: "consumption_nudge",
     title: "Não esqueceu de dar baixa?",
