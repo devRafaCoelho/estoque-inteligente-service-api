@@ -1,4 +1,5 @@
 const HouseholdRepository = require("../repositories/HouseholdRepository");
+const HouseholdMemberRepository = require("../repositories/HouseholdMemberRepository");
 
 /**
  * Resolve o escopo ativo do usuário (F3-4.2).
@@ -16,6 +17,24 @@ async function resolveScope(userId, client) {
     userId,
     householdId: household?.id || null,
   };
+}
+
+/**
+ * IDs de usuários no escopo financeiro (compras históricas ficam por user_id).
+ * Solo → [me]; household → todos os membros da casa.
+ * @returns {Promise<string[]>}
+ */
+async function resolveHouseholdUserIds(userId, client) {
+  const scope = await resolveScope(userId, client);
+  if (!scope.householdId) {
+    return scope.userId ? [scope.userId] : [];
+  }
+  const members = await HouseholdMemberRepository.listByHousehold(
+    scope.householdId,
+    client,
+  );
+  const ids = members.map((m) => m.user_id).filter(Boolean);
+  return ids.length ? ids : [userId];
 }
 
 /**
@@ -55,6 +74,7 @@ function appendScopeWhere(where, values, scope, startIndex, options) {
 
 module.exports = {
   resolveScope,
+  resolveHouseholdUserIds,
   scopePredicate,
   appendScopeWhere,
 };

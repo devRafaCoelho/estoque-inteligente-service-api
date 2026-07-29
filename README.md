@@ -280,7 +280,8 @@ Regras:
 - Ao **criar** a casa, produtos e listas solo do **owner** recebem `household_id` (backfill).
 - Novos produtos/listas criados por qualquer membro da casa já nascem com `household_id`.
 - Há no máximo **uma lista ativa** por usuário solo **ou** por household (índices parciais).
-- **Notificações** (v1) continuam por `user_id` do destinatário — não são filtradas por household ainda.
+- **Notificações** (v1) continuam por `user_id` do destinatário — o monitor pode gerar alertas para cada membro a partir do estoque compartilhado.
+- **Financeiro** (v1): leituras agregam compras de **todos os membros** da casa (`user_id` de cada um). Novas compras continuam registradas no `user_id` de quem confirmou a entrada.
 - Intakes/baixas/chat permanecem pessoais (`user_id`); o estoque que eles alteram já respeita o escopo do produto.
 
 Isolamento: membro da casa A **não** lê produtos com `household_id` da casa B.
