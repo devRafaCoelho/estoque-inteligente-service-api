@@ -201,11 +201,14 @@ const IntakeService = {
 
     let collected;
     try {
-      collected = await collectNfItems({
-        accessKey: parsedInput.accessKey,
-        stateCode,
-        qrContent: parsedInput.qrContent,
-      });
+      collected = await collectNfItems(
+        {
+          accessKey: parsedInput.accessKey,
+          stateCode,
+          qrContent: parsedInput.qrContent,
+        },
+        { userId },
+      );
     } catch (err) {
       if (err instanceof AppError) throw err;
       logger.warn("Collector NF-e falhou", { message: err.message });

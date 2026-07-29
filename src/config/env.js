@@ -28,7 +28,7 @@ const schema = Joi.object({
   UPLOAD_DIR: Joi.string().default("uploads"),
   UPLOAD_MAX_MB: Joi.number().integer().min(1).max(20).default(8),
   // NF-e / NFC-e (Sprint 5) — UFs com adapter de QR
-  NF_PRIORITY_STATES: Joi.string().default("SP,MG,BA"),
+  NF_PRIORITY_STATES: Joi.string().default("SP,MG,BA,RJ,PR"),
   NF_MOCK_COLLECTOR: Joi.boolean().truthy("true").falsy("false").default(false),
   SMTP_HOST: Joi.string().allow("").default(""),
   SMTP_PORT: Joi.number().integer().min(1).max(65535).default(587),

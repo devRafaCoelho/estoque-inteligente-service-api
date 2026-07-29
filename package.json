@@ -19,6 +19,8 @@
     "test:shopping-share-privacy": "node tests/shoppingListSharePrivacy.test.mjs",
     "test:household": "node tests/household.test.mjs",
     "test:household-scope": "node tests/householdScope.test.mjs",
+    "test:nf-url": "node tests/nfUrlParser.test.mjs",
+    "test:nf-collectors": "node tests/nfCollectors.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

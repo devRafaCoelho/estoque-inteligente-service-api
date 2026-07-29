@@ -13,6 +13,7 @@ const brazilianStateRoutes = require("./brazilianStateRoutes");
 const chatRoutes = require("./chatRoutes");
 const shoppingListShareRoutes = require("./shoppingListShareRoutes");
 const householdRoutes = require("./householdRoutes");
+const nfRoutes = require("./nfRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -31,6 +32,7 @@ function setRoutes(app) {
   app.use("/api/brazilian-states", brazilianStateRoutes);
   app.use("/api/chat", chatRoutes);
   app.use("/api/households", householdRoutes);
+  app.use("/api/nf", nfRoutes);
 }
 
 module.exports = setRoutes;

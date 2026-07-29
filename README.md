@@ -28,6 +28,7 @@ Camadas: `routes` → `middlewares` → `controllers` → `services` → `reposi
    - `database_sprint3_f3_share.sql` (links de lista)
    - `database_sprint4_f3_households.sql` (conta familiar)
    - `database_sprint4_f3_household_scope.sql` (escopo `household_id` em produtos/listas)
+   - `database_sprint5_f3_nf_coverage.sql` (logs de coleta NF-e)
 3. (Opcional) Seeds: `database_seed.sql` e/ou `database_seed_finance_history.sql`.
 4. Configure o `.env` a partir de `.env.example`.
 5. Instale e suba:
@@ -113,7 +114,9 @@ npm run notifications:digest
 |--------|------|-----------|
 | POST | `/api/intakes/parse-text` | Texto → draft de compra (rate limit parse) |
 | POST | `/api/intakes/parse-image` | Multipart `image` → visão/LLM → draft `receipt_photo` |
-| POST | `/api/intakes/parse-nf-qr` | QR/chave → collector UF (SP/MG/BA) → draft `nf_qr` |
+| POST | `/api/intakes/parse-nf-qr` | QR/chave → collector UF (SP/MG/BA/RJ/PR) → draft `nf_qr` |
+| GET | `/api/nf/coverage` | UFs com adapter + allowlist (`NF_PRIORITY_STATES`) |
+| GET | `/api/nf/collector-stats` | Contagens de sucesso/falha por UF (auth) |
 | GET | `/api/intakes` | Listar (ex.: `status=draft`) |
 | POST | `/api/intakes/clear-drafts` | Limpar rascunhos |
 | GET | `/api/intakes/:id` | Preview do draft |
@@ -196,25 +199,35 @@ Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com
 
 `parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision`. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422**.
 
-### NF-e / NFC-e (Sprint 5)
+### NF-e / NFC-e (Fase 3 — Sprint 5)
 
 `POST /api/intakes/parse-nf-qr` recebe `qrContent` e/ou `accessKey` (+ `stateCode` opcional), valida a chave (44 dígitos + DV), resolve a UF na ordem **chave/URL → body → `users.default_state`**, consulta o portal da UF, faz matching e cria draft `source: nf_qr`.
 
+**Contrato por UF (normalizado):** cada adapter expõe `collect({ accessKey, stateCode, qrContent })` e reutiliza helpers de portal (`portalHelpers.js` + `nfHtmlParser.js`). Novas UFs = URL builder + objeto collector + registro no factory + entrada em `NF_PRIORITY_STATES`.
+
 ```env
-NF_PRIORITY_STATES=SP,MG,BA
+NF_PRIORITY_STATES=SP,MG,BA,RJ,PR
 NF_MOCK_COLLECTOR=false
 ```
 
-#### Cobertura por UF (F2-5.5)
+`NF_PRIORITY_STATES` é a allowlist incremental: dá para habilitar UFs aos poucos sem redeploy de código (desde que o adapter exista).
+
+#### Cobertura por UF (F3-5.1 / F3-5.2)
 
 | UF | Adapter | Portal de consulta | Status |
 |----|---------|--------------------|--------|
 | **SP** | `SpNfCollector` | `nfce.fazenda.sp.gov.br` | Suportado |
 | **MG** | `MgNfCollector` | `portalsped.fazenda.mg.gov.br` | Suportado |
 | **BA** | `BaNfCollector` | `nfe.sefaz.ba.gov.br/.../qrcode.aspx` | Suportado — **exige QR completo** (chave + CSC/hash) |
+| **RJ** | `RjNfCollector` | `consultadfe.fazenda.rj.gov.br` | Suportado (Fase 3) |
+| **PR** | `PrNfCollector` | `fazenda.pr.gov.br/nfce/qrcode` | Suportado (Fase 3) |
 | Demais | — | — | **Não suportado** → **422** `nf_uf_unsupported` + `fallback: "photo"` |
 
-Não há cobertura nacional nesta fatia. Novas UFs → Fase 3.
+Catálogo em runtime: `GET /api/nf/coverage`.
+
+#### Observabilidade (F3-5.3)
+
+Tentativas de coleta gravam em `nf_collector_logs` (sucesso/falha, UF, código de erro). Resumo: `GET /api/nf/collector-stats?days=7` (autenticado).
 
 #### Limitações e expectativa
 
@@ -224,6 +237,7 @@ Não há cobertura nacional nesta fatia. Novas UFs → Fase 3.
 | Dependência SEFAZ | HTML do portal estadual; pode mudar sem aviso. |
 | Captcha / bloqueio | **502** com `fallback: "photo"`. |
 | Mock em dev | `NF_MOCK_COLLECTOR=true` — **não use em produção**. |
+| Códigos `details.code` | `nf_uf_unsupported`, `nf_ba_qr_required`, `nf_invalid_qr`, `nf_empty_items`, `nf_fetch_failed`, `nf_captcha`, `nf_collector_failed`, `nf_state_required`, `nf_invalid_payload` |
 
 ### E-mail e Web Push (Sprint 6)
 
@@ -313,9 +327,9 @@ Convites cancelados usam soft-delete (`revoked_at`).
 | S1 | Monitor: recompra, estimativa de consumo, nudge agrupado |
 | S3 | Chat com tools + rate limit |
 | S4 | `parse-image` + cota compartilhada texto/foto |
-| S5 | Collectors SP/MG/BA + fallback foto |
+| S5 | Collectors SP/MG/BA/RJ/PR + logs + coverage API |
 | S6 | Web Push, quiet hours, reset/boas-vindas, digest opt-in |
 
 ## Fora desta entrega
 
-Mais UFs no collector NF-e, filas Redis/BullMQ, STT no servidor (Whisper/Gemini), generate de lista por IA (hoje generate = regras), push nativo RN. Roadmap em `DOCUMENTACAO.md` (Fases 3–4).
+Mais UFs no collector NF-e (além de SP/MG/BA/RJ/PR), filas Redis/BullMQ, STT no servidor (Whisper/Gemini), generate de lista por IA (hoje generate = regras), push nativo RN. Roadmap em `DOCUMENTACAO.md` (Fases 3–4).
