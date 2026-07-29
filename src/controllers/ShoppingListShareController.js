@@ -20,6 +20,15 @@ const ShoppingListShareController = {
     const list = await ShoppingListShareService.getSharedList(req.params.token);
     return res.status(200).json({ list });
   },
+
+  async updateSharedItem(req, res) {
+    const result = await ShoppingListShareService.updateSharedItem(
+      req.params.token,
+      req.params.itemId,
+      req.body,
+    );
+    return res.status(200).json(result);
+  },
 };
 
 module.exports = ShoppingListShareController;

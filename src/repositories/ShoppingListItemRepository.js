@@ -94,6 +94,16 @@ const ShoppingListItemRepository = {
     return rows[0] || null;
   },
 
+  async findByIdInList(listId, itemId, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM shopping_list_items
+       WHERE id = $1 AND shopping_list_id = $2
+       LIMIT 1`,
+      [itemId, listId],
+    );
+    return rows[0] || null;
+  },
+
   async findByIdRaw(itemId, client = db) {
     const { rows } = await client.query(
       "SELECT * FROM shopping_list_items WHERE id = $1 LIMIT 1",

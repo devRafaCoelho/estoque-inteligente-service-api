@@ -5,7 +5,6 @@ const ShoppingListRepository = require("../repositories/ShoppingListRepository")
 const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepository");
 const ShoppingListShareRepository = require("../repositories/ShoppingListShareRepository");
 const ProductRepository = require("../repositories/ProductRepository");
-const UserPreferencesRepository = require("../repositories/UserPreferencesRepository");
 const { ShoppingListDto } = require("../dto/v1/shoppingListDto");
 const { estimateShoppingListSpend } = require("../utils/shoppingListSpend");
 
@@ -23,6 +22,44 @@ function generateToken() {
 
 function expiresAt(days = SHARE_TTL_DAYS) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
+async function resolveValidShare(rawToken) {
+  if (!rawToken || typeof rawToken !== "string" || rawToken.length < 8) {
+    throw new AppError("Token inválido", 404);
+  }
+
+  const tokenHash = hashToken(rawToken);
+  const share = await ShoppingListShareRepository.findValidByHash(tokenHash);
+  if (!share) throw new AppError("Link inválido, expirado ou revogado", 404);
+
+  const list = await ShoppingListRepository.findById(share.list_id);
+  if (!list) throw new AppError("Lista não encontrada", 404);
+  if (list.status !== "active") {
+    throw new AppError("Esta lista não está mais ativa", 410);
+  }
+
+  return { share, list };
+}
+
+async function buildSharedListDto(share, list) {
+  const items = await ShoppingListItemRepository.listByList(list.id);
+
+  const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
+  const productsById = new Map();
+  if (productIds.length) {
+    const allProducts = await ProductRepository.list(share.user_id, {});
+    for (const p of allProducts) {
+      if (productIds.includes(p.id)) productsById.set(p.id, p);
+    }
+  }
+
+  const spendEstimate = estimateShoppingListSpend(items, productsById, {
+    onlyPending: true,
+  });
+
+  const viewMode = list.view_mode || "paper";
+  return ShoppingListDto(list, items, viewMode, spendEstimate);
 }
 
 const ShoppingListShareService = {
@@ -66,40 +103,24 @@ const ShoppingListShareService = {
    * 410 se a lista não estiver mais ativa (status != active).
    */
   async getSharedList(rawToken) {
-    if (!rawToken || typeof rawToken !== "string" || rawToken.length < 8) {
-      throw new AppError("Token inválido", 404);
+    const { share, list } = await resolveValidShare(rawToken);
+    return buildSharedListDto(share, list);
+  },
+
+  /**
+   * Marca/desmarca item via token público (somente checked).
+   */
+  async updateSharedItem(rawToken, itemId, { checked } = {}) {
+    if (typeof checked !== "boolean") {
+      throw new AppError("Informe checked (boolean)", 422);
     }
+    const { share, list } = await resolveValidShare(rawToken);
+    const item = await ShoppingListItemRepository.findByIdInList(list.id, itemId);
+    if (!item) throw new AppError("Item não encontrado nesta lista", 404);
 
-    const tokenHash = hashToken(rawToken);
-    const share = await ShoppingListShareRepository.findValidByHash(tokenHash);
-    if (!share) throw new AppError("Link inválido, expirado ou revogado", 404);
-
-    const list = await ShoppingListRepository.findById(share.list_id);
-    if (!list) throw new AppError("Lista não encontrada", 404);
-    if (list.status !== "active") {
-      throw new AppError("Esta lista não está mais ativa", 410);
-    }
-
-    const items = await ShoppingListItemRepository.listByList(list.id);
-
-    // Estimativa de gasto: busca preços de produtos vinculados
-    const productIds = [...new Set(
-      items.map((i) => i.product_id).filter(Boolean),
-    )];
-    let productsById = new Map();
-    if (productIds.length) {
-      const allProducts = await ProductRepository.list(share.user_id, {});
-      for (const p of allProducts) {
-        if (productIds.includes(p.id)) productsById.set(p.id, p);
-      }
-    }
-
-    const spendEstimate = estimateShoppingListSpend(items, productsById, {
-      onlyPending: true,
-    });
-
-    const viewMode = list.view_mode || "paper";
-    return ShoppingListDto(list, items, viewMode, spendEstimate);
+    const updated = await ShoppingListItemRepository.update(itemId, { checked });
+    const dto = await buildSharedListDto(share, list);
+    return { list: dto, item: dto.items.find((row) => row.id === updated?.id) || null };
   },
 
   /** Lista shares ativos da lista ativa do usuário. */

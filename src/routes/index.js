@@ -19,6 +19,8 @@ function setRoutes(app) {
   app.use("/api/products", productRoutes);
   app.use("/api/intakes", intakeRoutes);
   app.use("/api/stock-outs", stockOutRoutes);
+  // shares antes de shopping-lists: o router da lista aplica auth em todo /shopping-lists/*
+  app.use("/api/shopping-lists/shares", shoppingListShareRoutes);
   app.use("/api/shopping-lists", shoppingListRoutes);
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/dashboard", dashboardRoutes);
@@ -27,7 +29,6 @@ function setRoutes(app) {
   app.use("/api/stock-units", stockUnitRoutes);
   app.use("/api/brazilian-states", brazilianStateRoutes);
   app.use("/api/chat", chatRoutes);
-  app.use("/api/shopping-lists/shares", shoppingListShareRoutes);
 }
 
 module.exports = setRoutes;
