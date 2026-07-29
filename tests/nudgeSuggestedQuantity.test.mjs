@@ -69,7 +69,7 @@ const day = (n) => new Date(Date.UTC(2026, 0, n, 12, 0, 0));
     nudgeDays: 5,
   });
 
-  assert.equal(payload.action, "open_quick_consume");
+  assert.equal(payload.action, "quick_consume_usual");
   assert.equal(payload.unit, "kg");
   assert.ok(
     payload.suggestedQuantity != null && payload.suggestedQuantity > 0,

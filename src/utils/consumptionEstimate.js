@@ -302,9 +302,13 @@ function buildQuickConsumeNudgePayload({
   const productIds = candidates.map((c) => c.productId).filter(Boolean);
   const primary = candidates[0] || null;
   const suggestedQuantity = primary ? suggestedUsualQuantity(primary) : null;
+  const hasUsual =
+    suggestedQuantity != null ||
+    items.some((item) => item.suggestedQuantity != null);
 
   return {
-    action: "open_quick_consume",
+    // Fase 3: baixa usual; Fase 2 client ainda aceita open_quick_consume como alias
+    action: hasUsual ? "quick_consume_usual" : "open_quick_consume",
     nudgeDays,
     overdueCount: candidates.length,
     productIds,
