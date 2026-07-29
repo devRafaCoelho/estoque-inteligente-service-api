@@ -11,7 +11,7 @@ const ShoppingListItemDto = (row) => ({
   createdAt: row.created_at,
 });
 
-const ShoppingListDto = (list, items = [], viewMode = "paper") => ({
+const ShoppingListDto = (list, items = [], viewMode = "paper", spendEstimate = null) => ({
   id: list.id,
   title: list.title,
   status: list.status,
@@ -26,6 +26,16 @@ const ShoppingListDto = (list, items = [], viewMode = "paper") => ({
     checked: items.filter((i) => i.checked).length,
     pending: items.filter((i) => !i.checked).length,
   },
+  spendEstimate: spendEstimate
+    ? {
+        currency: spendEstimate.currency || "BRL",
+        estimatedTotal: Number(spendEstimate.estimatedTotal) || 0,
+        pricedItemCount: Number(spendEstimate.pricedItemCount) || 0,
+        unpricedItemCount: Number(spendEstimate.unpricedItemCount) || 0,
+        isPartial: Boolean(spendEstimate.isPartial),
+        hasEstimate: Boolean(spendEstimate.hasEstimate),
+      }
+    : null,
 });
 
 module.exports = { ShoppingListItemDto, ShoppingListDto };

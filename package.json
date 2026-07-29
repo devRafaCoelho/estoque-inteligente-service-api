@@ -14,6 +14,7 @@
     "test:nudge-policy": "node tests/consumptionNudgePolicy.test.mjs",
     "test:propose-intake": "node tests/proposeIntake.test.mjs",
     "test:finance-tips": "node tests/financeTips.test.mjs",
+    "test:shopping-spend": "node tests/shoppingListSpend.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

@@ -8,6 +8,7 @@ const UserPreferencesRepository = require("../repositories/UserPreferencesReposi
 const { ShoppingListDto, ShoppingListItemDto } = require("../dto/v1/shoppingListDto");
 const { normalizeUnit } = require("./parsers/textIntakeParser");
 const { resolveShoppingListOrigin } = require("../utils/stockRules");
+const { estimateShoppingListSpend } = require("../utils/shoppingListSpend");
 const { productHintsFrom } = require("../utils/productHints");
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
@@ -106,7 +107,20 @@ async function loadDetail(userId, client = db) {
   const items = await ShoppingListItemRepository.listByList(list.id, client);
   const prefs = await UserPreferencesRepository.findByUser(userId, client);
   const viewMode = prefs?.shopping_list_view_mode === "list" ? "list" : "paper";
-  return ShoppingListDto(list, items, viewMode);
+
+  const productIds = [
+    ...new Set(items.map((item) => item.product_id).filter(Boolean)),
+  ];
+  const products =
+    productIds.length > 0
+      ? await ProductRepository.list(userId, { active: true }, client)
+      : [];
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  const spendEstimate = estimateShoppingListSpend(items, productsById, {
+    onlyPending: true,
+  });
+
+  return ShoppingListDto(list, items, viewMode, spendEstimate);
 }
 
 /**
