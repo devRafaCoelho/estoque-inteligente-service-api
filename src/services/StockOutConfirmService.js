@@ -8,6 +8,7 @@ const { StockOutDetailDto } = require("../dto/v1/stockOutDto");
 const { ProductListDto } = require("../dto/v1/productDto");
 const { assertDraftDocument } = require("../utils/draftDocument");
 const StockMonitorService = require("./StockMonitorService");
+const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 
 const StockOutConfirmService = {
   async confirm(userId, stockOutId, body) {
@@ -88,13 +89,22 @@ const StockOutConfirmService = {
           );
         }
 
-        const updated = await ProductRepository.setQuantity(
+        let updated = await ProductRepository.setQuantity(
           userId,
           product.id,
           after,
           { consumed: movedQty > 0 },
           client,
         );
+        if (movedQty > 0) {
+          const withStats =
+            await ConsumptionEstimateService.refreshProductConsumptionStats(
+              userId,
+              product.id,
+              client,
+            );
+          if (withStats) updated = withStats;
+        }
         affectedProducts.push(ProductListDto(updated));
       }
 

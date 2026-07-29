@@ -2,6 +2,7 @@ const AppError = require("../utils/AppError");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
 const StockMonitorService = require("./StockMonitorService");
+const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 const { ProductListDto, ProductDetailDto } = require("../dto/v1/productDto");
 const db = require("../config/db");
 
@@ -145,7 +146,13 @@ const ProductService = {
         { consumed: true },
         client,
       );
-      return ProductListDto(updated);
+      const withStats =
+        await ConsumptionEstimateService.refreshProductConsumptionStats(
+          userId,
+          id,
+          client,
+        );
+      return ProductListDto(withStats || updated);
     }).then(async (result) => {
       StockMonitorService.evaluateUserSafe(userId);
       return result;
@@ -181,7 +188,18 @@ const ProductService = {
         { consumed: before > 0 },
         client,
       );
-      return ProductListDto(updated);
+      if (before > 0) {
+        await ConsumptionEstimateService.refreshProductConsumptionStats(
+          userId,
+          id,
+          client,
+        );
+      }
+      const finalProduct =
+        before > 0
+          ? (await ProductRepository.findById(userId, id, client)) || updated
+          : updated;
+      return ProductListDto(finalProduct);
     }).then(async (result) => {
       StockMonitorService.evaluateUserSafe(userId);
       return result;

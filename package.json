@@ -8,6 +8,7 @@
     "dev": "node --watch-path=./src src/index.js",
     "test:api": "node tests/apiFlow.test.mjs",
     "test:rate-limit": "node tests/aiRateLimit.test.mjs",
+    "test:consumption": "node tests/consumptionEstimate.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

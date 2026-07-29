@@ -124,6 +124,27 @@ const ProductRepository = {
     return rows[0] || null;
   },
 
+  /**
+   * Persiste sinais de consumo derivados do histórico de baixas.
+   */
+  async updateConsumptionStats(
+    userId,
+    id,
+    { avgWeeklyUsage, consumptionCycleDays },
+    client = db,
+  ) {
+    const { rows } = await client.query(
+      `UPDATE products
+       SET avg_weekly_usage = $1,
+           consumption_cycle_days = $2,
+           updated_at = NOW()
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [avgWeeklyUsage, consumptionCycleDays, id, userId],
+    );
+    return rows[0] || null;
+  },
+
   async applyIntake(userId, id, { quantity, avgUnitPrice, unit, category }, client = db) {
     const { rows } = await client.query(
       `UPDATE products

@@ -1,5 +1,12 @@
-/** Mínimo de baixas para confiar no intervalo médio calculado. */
+/** Mínimo de baixas para calcular intervalo médio. */
 const MIN_OUTS_FOR_INTERVAL = 2;
+/** Histórico mínimo para estimativa estável (persistência / monitores precisos). */
+const MIN_OUTS_FOR_STABLE = 3;
+/** Intervalos acima disso são ignorados (gaps antigos / abandono). */
+const MAX_INTERVAL_DAYS = 180;
+/** Quantidade máxima de baixas recentes no cálculo. */
+const MAX_OUTS_WINDOW = 24;
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function round1(value) {
@@ -8,6 +15,40 @@ function round1(value) {
 
 function daysBetween(a, b) {
   return Math.max(0, (b.getTime() - a.getTime()) / MS_PER_DAY);
+}
+
+function median(sorted) {
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
+/**
+ * Remove intervalos outliers vs mediana (muito curtos/longos).
+ * Com menos de 3 intervalos, devolve a lista original.
+ */
+function trimIntervalOutliers(intervals) {
+  if (!intervals || intervals.length < 3) return [...(intervals || [])];
+
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const med = median(sorted);
+  if (!med || med <= 0) return [...intervals];
+
+  const filtered = intervals.filter((d) => d >= med * 0.4 && d <= med * 2.5);
+  return filtered.length >= 2 ? filtered : [...intervals];
+}
+
+function normalizeMovements(movements = []) {
+  return (movements || [])
+    .map((m) => ({
+      quantity: Number(m.quantity) || 0,
+      at: m.at instanceof Date ? m.at : new Date(m.at || m.created_at || m.createdAt),
+    }))
+    .filter((m) => m.at && !Number.isNaN(m.at.getTime()))
+    .sort((a, b) => a.at - b.at);
 }
 
 /**
@@ -30,50 +71,95 @@ function groupOutMovements(rows) {
 }
 
 /**
+ * Intervalos (dias) entre baixas consecutivas, com janela e outliers.
+ */
+function listIntervalsDays(movements) {
+  const sorted = normalizeMovements(movements).slice(-MAX_OUTS_WINDOW);
+  if (sorted.length < MIN_OUTS_FOR_INTERVAL) return [];
+
+  const intervals = [];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const days = daysBetween(sorted[i - 1].at, sorted[i].at);
+    if (days > 0 && days <= MAX_INTERVAL_DAYS) {
+      intervals.push(days);
+    }
+  }
+  return trimIntervalOutliers(intervals);
+}
+
+/**
  * Intervalo médio (dias) entre baixas consecutivas.
  */
 function averageIntervalDays(movements) {
-  if (!movements || movements.length < MIN_OUTS_FOR_INTERVAL) return null;
-  let sum = 0;
-  for (let i = 1; i < movements.length; i += 1) {
-    sum += daysBetween(movements[i - 1].at, movements[i].at);
-  }
-  return sum / (movements.length - 1);
+  const intervals = listIntervalsDays(movements);
+  if (!intervals.length) return null;
+  return intervals.reduce((sum, d) => sum + d, 0) / intervals.length;
 }
 
 /**
  * Média de quantidade saída por semana a partir do histórico.
  */
 function averageWeeklyUsageFromMovements(movements, now = new Date()) {
-  if (!movements?.length) return null;
-  const totalQty = movements.reduce((sum, m) => sum + m.quantity, 0);
-  const first = movements[0].at;
-  const last = movements[movements.length - 1].at;
-  const end = movements.length >= MIN_OUTS_FOR_INTERVAL ? last : now;
+  const sorted = normalizeMovements(movements);
+  if (!sorted.length) return null;
+
+  const totalQty = sorted.reduce((sum, m) => sum + m.quantity, 0);
+  const first = sorted[0].at;
+  const last = sorted[sorted.length - 1].at;
+  const end = sorted.length >= MIN_OUTS_FOR_INTERVAL ? last : now;
   const spanDays = Math.max(1, daysBetween(first, end));
   return (totalQty / spanDays) * 7;
 }
 
 /**
- * Monta estimativa de um produto (puro — fácil de testar / reusar no F2-1.4).
+ * Sinais persistíveis quando há histórico estável (≥ MIN_OUTS_FOR_STABLE).
+ * Não inventa valores sem histórico mínimo.
+ */
+function computePersistedConsumptionStats(movements = [], now = new Date()) {
+  const sorted = normalizeMovements(movements);
+  if (sorted.length < MIN_OUTS_FOR_STABLE) return null;
+
+  const interval = averageIntervalDays(sorted);
+  if (interval == null || !Number.isFinite(interval)) return null;
+
+  const weekly = averageWeeklyUsageFromMovements(sorted, now);
+  return {
+    avgWeeklyUsage: weekly != null ? round1(weekly) : null,
+    consumptionCycleDays: Math.max(1, Math.round(interval)),
+    outCount: sorted.length,
+  };
+}
+
+function resolveConfidence({ source, outCount }) {
+  if (source === "movements" && outCount >= MIN_OUTS_FOR_STABLE) return "high";
+  if (source === "movements") return "medium";
+  if (source === "product") return "medium";
+  if (source === "repurchase" || source === "repurchase_days") return "low";
+  return "none";
+}
+
+/**
+ * Monta estimativa de um produto (puro — reutilizável por monitor, chat e financeiro).
  *
  * @param {object} product row do banco
  * @param {Array<{ quantity: number, at: Date }>|undefined} movements
  * @param {Date} [now]
  */
 function buildProductEstimate(product, movements = [], now = new Date()) {
+  const normalized = normalizeMovements(movements);
+
   const lastConsumedAt = product.last_consumed_at
     ? new Date(product.last_consumed_at)
-    : movements.length
-      ? movements[movements.length - 1].at
+    : normalized.length
+      ? normalized[normalized.length - 1].at
       : null;
 
   const daysSinceLastOut = lastConsumedAt
     ? Math.floor(daysBetween(lastConsumedAt, now))
     : null;
 
-  const intervalFromHistory = averageIntervalDays(movements);
-  const weeklyFromHistory = averageWeeklyUsageFromMovements(movements, now);
+  const intervalFromHistory = averageIntervalDays(normalized);
+  const weeklyFromHistory = averageWeeklyUsageFromMovements(normalized, now);
 
   const storedCycle =
     product.consumption_cycle_days != null
@@ -94,6 +180,7 @@ function buildProductEstimate(product, movements = [], now = new Date()) {
       weeklyFromHistory != null ? round1(weeklyFromHistory) : storedWeekly;
     source = "movements";
   } else if (storedCycle != null && Number.isFinite(storedCycle) && storedCycle >= 1) {
+    // Ciclo já persistido a partir de histórico anterior — não inventa do zero.
     expectedCycleDays = Math.round(storedCycle);
     avgWeeklyUsage =
       weeklyFromHistory != null
@@ -107,7 +194,7 @@ function buildProductEstimate(product, movements = [], now = new Date()) {
     Number.isFinite(repurchaseDays) &&
     repurchaseDays >= 1
   ) {
-    // Pouco histórico: ciclo de recompra como proxy fraco (doc Fase 2 / v1).
+    // Sem histórico mínimo: repurchase_days como fallback explícito.
     expectedCycleDays = Math.round(repurchaseDays);
     avgWeeklyUsage =
       weeklyFromHistory != null
@@ -115,13 +202,19 @@ function buildProductEstimate(product, movements = [], now = new Date()) {
         : storedWeekly != null
           ? round1(storedWeekly)
           : null;
-    source = "repurchase";
+    source = "repurchase_days";
   } else if (weeklyFromHistory != null || storedWeekly != null) {
     avgWeeklyUsage = round1(weeklyFromHistory ?? storedWeekly);
     source = weeklyFromHistory != null ? "movements" : "product";
   }
 
-  const outCount = movements.length;
+  const outCount = normalized.length;
+  const confidence = resolveConfidence({ source, outCount });
+  const overdueDays =
+    expectedCycleDays != null && daysSinceLastOut != null
+      ? daysSinceLastOut - expectedCycleDays
+      : null;
+
   const isOverdue =
     expectedCycleDays != null &&
     daysSinceLastOut != null &&
@@ -132,21 +225,30 @@ function buildProductEstimate(product, movements = [], now = new Date()) {
     productId: product.id,
     name: product.name,
     unit: product.unit,
+    category: product.category || null,
     quantity: Number(product.quantity) || 0,
     outCount,
     avgWeeklyUsage,
     expectedCycleDays,
     lastConsumedAt: lastConsumedAt ? lastConsumedAt.toISOString() : null,
     daysSinceLastOut,
+    overdueDays,
     isOverdue,
     source,
+    confidence,
+    stable: source === "movements" && outCount >= MIN_OUTS_FOR_STABLE,
   };
 }
 
 module.exports = {
   MIN_OUTS_FOR_INTERVAL,
+  MIN_OUTS_FOR_STABLE,
+  MAX_INTERVAL_DAYS,
   groupOutMovements,
   averageIntervalDays,
   averageWeeklyUsageFromMovements,
+  listIntervalsDays,
+  trimIntervalOutliers,
+  computePersistedConsumptionStats,
   buildProductEstimate,
 };
