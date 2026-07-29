@@ -1,18 +1,20 @@
 -- =============================================================
--- Estoque Inteligente — Script de criação do banco (v1)
+-- Estoque Inteligente — Schema completo (entrega atual)
 -- PostgreSQL 16+
 --
--- IMPORTANTE: execute este script CONECTADO no banco
--- "estoque_inteligente" (NÃO no banco "postgres").
+-- Execute CONECTADO no banco da aplicação (não no banco "postgres").
+-- Ordem: extensões → ENUMs → tabelas (por dependência) → índices.
 --
--- Ordem: extensões -> ENUMs -> tabelas (por dependência) -> índices.
+-- Este é o ÚNICO script SQL do repositório.
+-- Sem INSERTs / seeds — rótulos de catálogo (categorias, unidades, UFs)
+-- são garantidos pela API no boot (ensureReferenceData).
 -- =============================================================
 
 -- -------------------------------------------------------------
 -- 0. Extensões
 -- -------------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid()
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";    -- similaridade de nomes (match IA/NF)
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- -------------------------------------------------------------
 -- 1. Tipos enumerados (ENUMs)
@@ -50,7 +52,6 @@ CREATE TYPE intake_source AS ENUM (
   'chat'
 );
 
--- Fontes da baixa (consumo); subset do intake
 CREATE TYPE stock_out_source AS ENUM (
   'natural_language',
   'chat',
@@ -94,8 +95,8 @@ CREATE TYPE notification_type AS ENUM (
   'low_stock',
   'out_of_stock',
   'repurchase_reminder',
-  'consumption_nudge',      -- lembrete genérico: "esqueceu de dar baixa?"
-  'missing_consumption',    -- padrão de uso sem baixa no período
+  'consumption_nudge',
+  'missing_consumption',
   'intake_ready',
   'system'
 );
@@ -122,13 +123,12 @@ CREATE TYPE auth_provider AS ENUM (
 -- 2. Conta e autenticação
 -- -------------------------------------------------------------
 
--- 2.1 users
 CREATE TABLE users (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   first_name     VARCHAR(150) NOT NULL,
   last_name      VARCHAR(150),
   email          VARCHAR(255) NOT NULL UNIQUE,
-  password_hash  VARCHAR(255),              -- NULL para contas só Google/Apple
+  password_hash  VARCHAR(255),
   avatar_url     TEXT,
   status         account_status NOT NULL DEFAULT 'active',
   phone          VARCHAR(20),
@@ -152,17 +152,15 @@ CREATE INDEX idx_users_email_active ON users (email)
 CREATE UNIQUE INDEX idx_users_cpf_active ON users (cpf)
   WHERE cpf IS NOT NULL AND status = 'active';
 
--- 2.2 user_auth_identities
 CREATE TABLE user_auth_identities (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   provider         auth_provider NOT NULL,
-  provider_user_id VARCHAR(255) NOT NULL,   -- `sub` do Google/Apple
-  email            VARCHAR(255),            -- snapshot do e-mail no provedor
+  provider_user_id VARCHAR(255) NOT NULL,
+  email            VARCHAR(255),
   email_verified   BOOLEAN NOT NULL DEFAULT FALSE,
   last_used_at     TIMESTAMPTZ,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
   UNIQUE (provider, provider_user_id)
 );
 
@@ -170,11 +168,10 @@ CREATE INDEX idx_user_auth_identities_user ON user_auth_identities (user_id);
 CREATE INDEX idx_user_auth_identities_email ON user_auth_identities (email)
   WHERE email IS NOT NULL;
 
--- 2.3 password_reset_tokens
 CREATE TABLE password_reset_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  token_hash  VARCHAR(255) NOT NULL,     -- hash do token; nunca o token puro
+  token_hash  VARCHAR(255) NOT NULL,
   expires_at  TIMESTAMPTZ NOT NULL,
   used_at     TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -183,7 +180,6 @@ CREATE TABLE password_reset_tokens (
 CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens (user_id);
 CREATE UNIQUE INDEX idx_password_reset_tokens_hash ON password_reset_tokens (token_hash);
 
--- 2.4 user_preferences
 CREATE TABLE user_preferences (
   user_id                     UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
   notify_low_stock            BOOLEAN NOT NULL DEFAULT TRUE,
@@ -200,23 +196,68 @@ CREATE TABLE user_preferences (
   quiet_hours_timezone        VARCHAR(60) NOT NULL DEFAULT 'America/Sao_Paulo',
   last_email_digest_at        TIMESTAMPTZ,
   shopping_list_view_mode     VARCHAR(20) NOT NULL DEFAULT 'paper',
-    -- list | paper | table (table só faz sentido no client desktop)
   currency                    CHAR(3) NOT NULL DEFAULT 'BRL',
   locale                      VARCHAR(10) NOT NULL DEFAULT 'pt-BR',
   preferred_view_mode         VARCHAR(20) NOT NULL DEFAULT 'cards',
-    -- cards | table (table = desktop opcional)
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- -------------------------------------------------------------
--- 3. Estoque
+-- 3. Conta familiar (household)
 -- -------------------------------------------------------------
 
--- 3.1 products
+CREATE TABLE households (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            VARCHAR(120) NOT NULL,
+  owner_user_id   UUID NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_households_owner ON households (owner_user_id);
+
+CREATE TABLE household_members (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id    UUID NOT NULL REFERENCES households (id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  role            VARCHAR(20) NOT NULL CHECK (role IN ('owner', 'member')),
+  joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (household_id, user_id)
+);
+
+CREATE INDEX idx_household_members_user ON household_members (user_id);
+CREATE INDEX idx_household_members_household
+  ON household_members (household_id, joined_at ASC);
+
+CREATE TABLE household_invites (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id        UUID NOT NULL REFERENCES households (id) ON DELETE CASCADE,
+  email               VARCHAR(255) NOT NULL,
+  invited_by_user_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash          VARCHAR(64) NOT NULL UNIQUE,
+  role                VARCHAR(20) NOT NULL DEFAULT 'member'
+                        CHECK (role IN ('member')),
+  expires_at          TIMESTAMPTZ NOT NULL,
+  accepted_at         TIMESTAMPTZ,
+  revoked_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_household_invites_household
+  ON household_invites (household_id, created_at DESC);
+CREATE INDEX idx_household_invites_email
+  ON household_invites (email)
+  WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
+-- -------------------------------------------------------------
+-- 4. Estoque
+-- -------------------------------------------------------------
+
 CREATE TABLE products (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  household_id      UUID REFERENCES households (id) ON DELETE SET NULL,
   name              VARCHAR(200) NOT NULL,
   category          product_category NOT NULL DEFAULT 'other',
   quantity          NUMERIC(12, 3) NOT NULL DEFAULT 0
@@ -226,9 +267,9 @@ CREATE TABLE products (
     CHECK (min_quantity >= 0),
   avg_unit_price    NUMERIC(12, 2),
   last_purchased_at TIMESTAMPTZ,
-  last_consumed_at  TIMESTAMPTZ,     -- última baixa (movimento out)
-  avg_weekly_usage  NUMERIC(12, 3),  -- estimado a partir do histórico de outs
-  consumption_cycle_days INTEGER,    -- intervalo médio entre baixas (estimado)
+  last_consumed_at  TIMESTAMPTZ,
+  avg_weekly_usage  NUMERIC(12, 3),
+  consumption_cycle_days INTEGER,
   repurchase_days   INTEGER,
   notes             TEXT,
   active            BOOLEAN NOT NULL DEFAULT TRUE,
@@ -237,6 +278,8 @@ CREATE TABLE products (
 );
 
 CREATE INDEX idx_products_user ON products (user_id);
+CREATE INDEX idx_products_household ON products (household_id)
+  WHERE household_id IS NOT NULL;
 CREATE INDEX idx_products_user_category ON products (user_id, category);
 CREATE INDEX idx_products_user_qty ON products (user_id, quantity);
 CREATE INDEX idx_products_low_stock ON products (user_id)
@@ -247,24 +290,21 @@ CREATE INDEX idx_products_last_consumed ON products (user_id, last_consumed_at)
   WHERE active = TRUE;
 CREATE INDEX idx_products_name_trgm ON products USING gin (name gin_trgm_ops);
 
--- 3.2 product_aliases
 CREATE TABLE product_aliases (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   product_id  UUID NOT NULL REFERENCES products (id) ON DELETE CASCADE,
   alias       VARCHAR(255) NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
   UNIQUE (user_id, alias)
 );
 
 CREATE INDEX idx_product_aliases_product ON product_aliases (product_id);
 
 -- -------------------------------------------------------------
--- 4. Entrada (compra) e baixa (consumo)
+-- 5. Entrada (compra) e baixa (consumo)
 -- -------------------------------------------------------------
 
--- 4.1 stock_intakes
 CREATE TABLE stock_intakes (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -286,7 +326,6 @@ CREATE INDEX idx_stock_intakes_status ON stock_intakes (status);
 CREATE INDEX idx_stock_intakes_access_key ON stock_intakes (access_key)
   WHERE access_key IS NOT NULL;
 
--- 4.2 stock_intake_items
 CREATE TABLE stock_intake_items (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   intake_id         UUID NOT NULL REFERENCES stock_intakes (id) ON DELETE CASCADE,
@@ -305,7 +344,6 @@ CREATE TABLE stock_intake_items (
 
 CREATE INDEX idx_stock_intake_items_intake ON stock_intake_items (intake_id);
 
--- 4.3 stock_outs
 CREATE TABLE stock_outs (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -322,7 +360,6 @@ CREATE TABLE stock_outs (
 CREATE INDEX idx_stock_outs_user ON stock_outs (user_id, created_at DESC);
 CREATE INDEX idx_stock_outs_status ON stock_outs (status);
 
--- 4.4 stock_out_items
 CREATE TABLE stock_out_items (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   stock_out_id      UUID NOT NULL REFERENCES stock_outs (id) ON DELETE CASCADE,
@@ -341,7 +378,6 @@ CREATE TABLE stock_out_items (
 
 CREATE INDEX idx_stock_out_items_out ON stock_out_items (stock_out_id);
 
--- 4.5 stock_movements
 CREATE TABLE stock_movements (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -365,10 +401,9 @@ CREATE INDEX idx_stock_movements_out ON stock_movements (stock_out_id)
   WHERE stock_out_id IS NOT NULL;
 
 -- -------------------------------------------------------------
--- 5. Financeiro
+-- 6. Financeiro
 -- -------------------------------------------------------------
 
--- 5.1 purchases
 CREATE TABLE purchases (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -383,7 +418,6 @@ CREATE TABLE purchases (
 
 CREATE INDEX idx_purchases_user_date ON purchases (user_id, purchased_at DESC);
 
--- 5.2 purchase_items
 CREATE TABLE purchase_items (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   purchase_id   UUID NOT NULL REFERENCES purchases (id) ON DELETE CASCADE,
@@ -401,13 +435,13 @@ CREATE INDEX idx_purchase_items_purchase ON purchase_items (purchase_id);
 CREATE INDEX idx_purchase_items_product ON purchase_items (product_id);
 
 -- -------------------------------------------------------------
--- 6. Lista de compras
+-- 7. Lista de compras
 -- -------------------------------------------------------------
 
--- 6.1 shopping_lists
 CREATE TABLE shopping_lists (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  household_id UUID REFERENCES households (id) ON DELETE SET NULL,
   title        VARCHAR(200) NOT NULL DEFAULT 'Lista de compras',
   status       shopping_list_status NOT NULL DEFAULT 'active',
   generated_by VARCHAR(40),
@@ -417,11 +451,15 @@ CREATE TABLE shopping_lists (
 );
 
 CREATE INDEX idx_shopping_lists_user ON shopping_lists (user_id, status);
-CREATE UNIQUE INDEX idx_shopping_lists_one_active
+CREATE INDEX idx_shopping_lists_household ON shopping_lists (household_id)
+  WHERE household_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_shopping_lists_one_active_solo
   ON shopping_lists (user_id)
-  WHERE status = 'active';
+  WHERE status = 'active' AND household_id IS NULL;
+CREATE UNIQUE INDEX idx_shopping_lists_one_active_household
+  ON shopping_lists (household_id)
+  WHERE status = 'active' AND household_id IS NOT NULL;
 
--- 6.2 shopping_list_items
 CREATE TABLE shopping_list_items (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   shopping_list_id UUID NOT NULL REFERENCES shopping_lists (id) ON DELETE CASCADE,
@@ -438,9 +476,25 @@ CREATE TABLE shopping_list_items (
 
 CREATE INDEX idx_shopping_list_items_list ON shopping_list_items (shopping_list_id);
 
+CREATE TABLE shopping_list_shares (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  list_id       UUID NOT NULL REFERENCES shopping_lists (id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash    VARCHAR(64) NOT NULL UNIQUE,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  revoked_at    TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_shopping_list_shares_user
+  ON shopping_list_shares (user_id, created_at DESC);
+CREATE INDEX idx_shopping_list_shares_token
+  ON shopping_list_shares (token_hash);
+
 -- -------------------------------------------------------------
--- 7. Notificações
+-- 8. Notificações e Web Push
 -- -------------------------------------------------------------
+
 CREATE TABLE notifications (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -458,7 +512,7 @@ CREATE INDEX idx_notifications_unread ON notifications (user_id)
   WHERE read_at IS NULL;
 
 CREATE TABLE push_subscriptions (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   endpoint      TEXT NOT NULL UNIQUE,
   p256dh_key    TEXT NOT NULL,
@@ -471,8 +525,9 @@ CREATE TABLE push_subscriptions (
 CREATE INDEX idx_push_subscriptions_user ON push_subscriptions (user_id, created_at DESC);
 
 -- -------------------------------------------------------------
--- 8. Chat (assistente IA)
+-- 9. Chat (assistente)
 -- -------------------------------------------------------------
+
 CREATE TABLE chat_sessions (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -495,8 +550,9 @@ CREATE TABLE chat_messages (
 CREATE INDEX idx_chat_messages_session ON chat_messages (session_id, created_at);
 
 -- -------------------------------------------------------------
--- 9. Operacional — logs de coleta de NF por UF
+-- 10. Observabilidade NF-e
 -- -------------------------------------------------------------
+
 CREATE TABLE nf_collector_logs (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID REFERENCES users (id) ON DELETE SET NULL,
@@ -513,97 +569,30 @@ CREATE TABLE nf_collector_logs (
 CREATE INDEX idx_nf_collector_logs_state ON nf_collector_logs (state_code, created_at DESC);
 
 -- -------------------------------------------------------------
--- 10. Dados de referência (categorias, unidades, UFs)
+-- 11. Catálogos de referência (estrutura; dados via API no boot)
 -- -------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS product_categories (
+CREATE TABLE product_categories (
   code        VARCHAR(32) PRIMARY KEY,
   label       VARCHAR(80) NOT NULL,
   sort_order  INT NOT NULL DEFAULT 0,
   active      BOOLEAN NOT NULL DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS stock_units (
+CREATE TABLE stock_units (
   code        VARCHAR(32) PRIMARY KEY,
   label       VARCHAR(80) NOT NULL,
   sort_order  INT NOT NULL DEFAULT 0,
   active      BOOLEAN NOT NULL DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS brazilian_states (
+CREATE TABLE brazilian_states (
   code        CHAR(2) PRIMARY KEY,
   name        VARCHAR(80) NOT NULL,
   sort_order  INT NOT NULL DEFAULT 0,
   active      BOOLEAN NOT NULL DEFAULT TRUE
 );
 
-INSERT INTO product_categories (code, label, sort_order) VALUES
-  ('cleaning',  'Limpeza',     10),
-  ('hygiene',   'Higiene',     20),
-  ('produce',   'Hortifruti',  30),
-  ('grocery',   'Mercearia',   40),
-  ('dairy',     'Laticínios',  50),
-  ('beverages', 'Bebidas',     60),
-  ('frozen',    'Congelados',  70),
-  ('household', 'Casa',        80),
-  ('other',     'Outros',      90)
-ON CONFLICT (code) DO UPDATE
-SET label = EXCLUDED.label,
-    sort_order = EXCLUDED.sort_order,
-    active = TRUE;
-
-INSERT INTO stock_units (code, label, sort_order) VALUES
-  ('un',     'un',      10),
-  ('g',      'g',       20),
-  ('kg',     'kg',      30),
-  ('ml',     'ml',      40),
-  ('l',      'L',       50),
-  ('pack',   'pct',     60),
-  ('can',    'lata',    70),
-  ('bottle', 'garrafa', 80),
-  ('box',    'cx',      90),
-  ('other',  'outro',  100)
-ON CONFLICT (code) DO UPDATE
-SET label = EXCLUDED.label,
-    sort_order = EXCLUDED.sort_order,
-    active = TRUE;
-
-INSERT INTO brazilian_states (code, name, sort_order) VALUES
-  ('AC', 'Acre', 1),
-  ('AL', 'Alagoas', 2),
-  ('AP', 'Amapá', 3),
-  ('AM', 'Amazonas', 4),
-  ('BA', 'Bahia', 5),
-  ('CE', 'Ceará', 6),
-  ('DF', 'Distrito Federal', 7),
-  ('ES', 'Espírito Santo', 8),
-  ('GO', 'Goiás', 9),
-  ('MA', 'Maranhão', 10),
-  ('MT', 'Mato Grosso', 11),
-  ('MS', 'Mato Grosso do Sul', 12),
-  ('MG', 'Minas Gerais', 13),
-  ('PA', 'Pará', 14),
-  ('PB', 'Paraíba', 15),
-  ('PR', 'Paraná', 16),
-  ('PE', 'Pernambuco', 17),
-  ('PI', 'Piauí', 18),
-  ('RJ', 'Rio de Janeiro', 19),
-  ('RN', 'Rio Grande do Norte', 20),
-  ('RS', 'Rio Grande do Sul', 21),
-  ('RO', 'Rondônia', 22),
-  ('RR', 'Roraima', 23),
-  ('SC', 'Santa Catarina', 24),
-  ('SP', 'São Paulo', 25),
-  ('SE', 'Sergipe', 26),
-  ('TO', 'Tocantins', 27)
-ON CONFLICT (code) DO UPDATE
-SET name = EXCLUDED.name,
-    sort_order = EXCLUDED.sort_order,
-    active = TRUE;
-
 -- =============================================================
--- Fim do script v1
---
--- Dados de demonstração (opcional):
---   psql -d estoque_inteligente -f database_seed.sql
+-- Fim do schema
 -- =============================================================

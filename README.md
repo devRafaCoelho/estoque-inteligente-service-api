@@ -1,8 +1,8 @@
 # Estoque Inteligente — Service API
 
-API do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa (texto + foto + NF-e), lista de compras, dashboard, notificações in-app, **Web Push**, e-mail transacional, financeiro e chat com tools (propostas + rate limit).
+API do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa (texto + foto + NF-e), lista de compras, dashboard, notificações in-app, **Web Push**, e-mail transacional, financeiro, chat com tools, compartilhamento de lista e conta familiar.
 
-A arquitetura-alvo completa (Redis, filas, etc.) está em [`BACKEND.md`](./BACKEND.md) e no [`DOCUMENTACAO.md`](../DOCUMENTACAO.md) do monorepo — este README descreve **o que a API entrega hoje** (Fases 1 e 2).
+Documentação de produto e próximos passos: [`documentacoes/`](./documentacoes/). Este README descreve **como rodar a API** e o que ela entrega.
 
 ## Stack
 
@@ -16,29 +16,35 @@ A arquitetura-alvo completa (Redis, filas, etc.) está em [`BACKEND.md`](./BACKE
 - Winston (logs)
 - Swagger / OpenAPI (`swagger-ui-express`)
 
-> Nesta fatia: `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico. Rate limit de IA é **em memória** (por processo). Sem `SMTP_HOST`, e-mails vão para preview em `EMAIL_PREVIEW_DIR`. Sem chaves VAPID, push fica desabilitado na API.
+> `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico. Rate limit de IA é **em memória** (por processo). Sem `SMTP_HOST`, e-mails vão para preview em `EMAIL_PREVIEW_DIR`. Sem chaves VAPID, push fica desabilitado na API.
 
-Camadas: `routes` → `middlewares` → `controllers` → `services` → `repositories` (+ `schemas` / `dto/v1` / `mail`). Detalhes em `BACKEND.md`.
+Camadas: `routes` → `middlewares` → `controllers` → `services` → `repositories` (+ `schemas` / `dto/v1` / `mail`). Visão geral em [`documentacoes/BACKEND.md`](./documentacoes/BACKEND.md).
 
 ## Como rodar
 
-1. Crie o banco e aplique o schema (`database.sql` no banco `estoque_inteligente`).
-2. Em banco **já existente**, rode as migrações incrementais na ordem:
-   - `database_sprint6.sql` (quiet hours + `push_subscriptions`)
-   - `database_sprint3_f3_share.sql` (links de lista)
-   - `database_sprint4_f3_households.sql` (conta familiar)
-   - `database_sprint4_f3_household_scope.sql` (escopo `household_id` em produtos/listas)
-   - `database_sprint5_f3_nf_coverage.sql` (logs de coleta NF-e)
-3. (Opcional) Seeds: `database_seed.sql` e/ou `database_seed_finance_history.sql`.
-4. Configure o `.env` a partir de `.env.example`.
-5. Instale e suba:
+1. Crie o banco PostgreSQL e aplique **somente** o schema:
+   ```bash
+   psql "$DATABASE_URL" -f database.sql
+   ```
+   Esse é o único arquivo SQL do repositório (enums + tabelas + índices; sem seeds).
+2. Configure o `.env` a partir de `.env.example`.
+3. Instale e suba:
 
 ```bash
 npm install
 npm start
 ```
 
-A API sobe em `http://localhost:3001`. Em desenvolvimento: `npm run dev` (watch).
+Na subida, a API garante os rótulos de catálogo (categorias, unidades, UFs). A API sobe em `http://localhost:3001`. Em desenvolvimento: `npm run dev` (watch).
+
+### Zerar um banco existente
+
+```bash
+psql "$DATABASE_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+psql "$DATABASE_URL" -f database.sql
+```
+
+Depois suba a API uma vez (catálogos).
 
 ## Swagger
 
@@ -330,6 +336,6 @@ Convites cancelados usam soft-delete (`revoked_at`).
 | S5 | Collectors SP/MG/BA/RJ/PR + logs + coverage API |
 | S6 | Web Push, quiet hours, reset/boas-vindas, digest opt-in |
 
-## Fora desta entrega
+## Fora desta entrega / próximos passos
 
-Mais UFs no collector NF-e (além de SP/MG/BA/RJ/PR), filas Redis/BullMQ, STT no servidor (Whisper/Gemini), generate de lista por IA (hoje generate = regras), push nativo RN. Roadmap em `DOCUMENTACAO.md` (Fases 3–4).
+Filas Redis/BullMQ, STT no servidor, push nativo (React Native), offline parcial, landing page de marketing, cobrança e parcerias locais — ver [`documentacoes/PROXIMOS-PASSOS.md`](./documentacoes/PROXIMOS-PASSOS.md) e [`documentacoes/DOCUMENTACAO.md`](./documentacoes/DOCUMENTACAO.md).

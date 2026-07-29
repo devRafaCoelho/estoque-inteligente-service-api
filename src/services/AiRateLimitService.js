@@ -1,7 +1,7 @@
 const AppError = require("../utils/AppError");
 const env = require("../config/env");
 
-/** Contadores diários em memória (v1). Chave alinhada ao BACKEND.md. */
+/** Contadores diários em memória (v1). */
 const counters = new Map();
 
 const KINDS = {
