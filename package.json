@@ -11,6 +11,7 @@
     "test:consumption": "node tests/consumptionEstimate.test.mjs",
     "test:nudge": "node tests/nudgeSuggestedQuantity.test.mjs",
     "test:stock-rules": "node tests/stockRules.test.mjs",
+    "test:nudge-policy": "node tests/consumptionNudgePolicy.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

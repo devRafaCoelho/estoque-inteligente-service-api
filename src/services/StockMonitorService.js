@@ -7,11 +7,15 @@ const NotificationDispatchService = require("./NotificationDispatchService");
 const stockStatus = require("../utils/stockStatus");
 const { isRepurchaseDue, MS_PER_DAY } = require("../utils/stockRules");
 const { buildQuickConsumeNudgePayload } = require("../utils/consumptionEstimate");
+const {
+  CONSUMPTION_NUDGE_TYPES,
+  evaluateConsumptionNudgeGate,
+  resolveNudgeWindowDays,
+} = require("../utils/consumptionNudgePolicy");
 const logger = require("../utils/logger");
 
 const STOCK_DEDUP_HOURS = 72;
 const REPURCHASE_DEDUP_HOURS = 72;
-const DEFAULT_NUDGE_DAYS = 5;
 
 function formatQty(quantity, unit) {
   const n = Number(quantity);
@@ -89,12 +93,23 @@ async function ensureRepurchaseReminder(userId, product) {
   return true;
 }
 
-async function hasRecentConsumptionReminder(userId, days) {
-  const [generic, patterned] = await Promise.all([
-    NotificationRepository.findRecentByType(userId, "consumption_nudge", days),
-    NotificationRepository.findRecentByType(userId, "missing_consumption", days),
-  ]);
-  return Boolean(generic || patterned);
+async function resolveConsumptionNudgeGate(userId, prefs) {
+  const windowDays = resolveNudgeWindowDays(prefs);
+  const recentRows = await Promise.all(
+    CONSUMPTION_NUDGE_TYPES.map((type) =>
+      NotificationRepository.findRecentByType(userId, type, windowDays),
+    ),
+  );
+  const recentReminderAt =
+    recentRows
+      .filter(Boolean)
+      .map((row) => row.created_at)
+      .sort((a, b) => new Date(b) - new Date(a))[0] || null;
+
+  return evaluateConsumptionNudgeGate({
+    prefs,
+    recentReminderAt,
+  });
 }
 
 function formatOverdueNames(candidates, limit = 3) {
@@ -110,11 +125,10 @@ function formatOverdueNames(candidates, limit = 3) {
 }
 
 async function ensureMissingConsumptionNudge(userId, prefs) {
-  if (prefs.notify_consumption_nudge === false) return false;
+  const gate = await resolveConsumptionNudgeGate(userId, prefs);
+  if (!gate.allow) return false;
 
-  const days = Number(prefs.consumption_nudge_days) || DEFAULT_NUDGE_DAYS;
-  if (await hasRecentConsumptionReminder(userId, days)) return false;
-
+  const days = gate.windowDays;
   const overdue = await ConsumptionEstimateService.listOverdueCandidates(userId);
   if (!overdue.length) return false;
 
@@ -143,11 +157,10 @@ async function ensureMissingConsumptionNudge(userId, prefs) {
 }
 
 async function ensureConsumptionNudge(userId, prefs) {
-  if (prefs.notify_consumption_nudge === false) return false;
+  const gate = await resolveConsumptionNudgeGate(userId, prefs);
+  if (!gate.allow) return false;
 
-  const days = Number(prefs.consumption_nudge_days) || DEFAULT_NUDGE_DAYS;
-  if (await hasRecentConsumptionReminder(userId, days)) return false;
-
+  const days = gate.windowDays;
   const outCount = await StockMovementRepository.countOutSinceDays(userId, days);
   if (outCount > 0) return false;
 
