@@ -112,13 +112,30 @@ const ShoppingListShareService = {
   },
 
   /**
-   * Lê a lista via token público (sem autenticação) — somente leitura (v1).
+   * Lê a lista via token público (sem autenticação).
    * 404 se token inválido/expirado/revogado.
    * 410 se a lista não estiver mais ativa.
    */
   async getSharedList(rawToken) {
     const { share, list } = await resolveValidShare(rawToken);
     return buildSharedListDto(share, list);
+  },
+
+  /**
+   * Marca/desmarca item via token público.
+   * Só altera checked — não muda estoque nem dados do produto.
+   */
+  async updateSharedItem(rawToken, itemId, { checked } = {}) {
+    if (typeof checked !== "boolean") {
+      throw new AppError("Informe checked (boolean)", 422);
+    }
+    const { share, list } = await resolveValidShare(rawToken);
+    const item = await ShoppingListItemRepository.findByIdInList(list.id, itemId);
+    if (!item) throw new AppError("Item não encontrado nesta lista", 404);
+
+    const updated = await ShoppingListItemRepository.update(itemId, { checked });
+    const dto = await buildSharedListDto(share, list);
+    return { list: dto, item: dto.items.find((row) => row.id === updated?.id) || null };
   },
 
   /** Lista shares ativos da lista ativa do usuário. */

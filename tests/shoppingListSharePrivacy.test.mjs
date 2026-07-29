@@ -139,21 +139,24 @@ const FORBIDDEN_SPEND_KEYS = [
   ]);
 }
 
-// ── F3-3.4 rotas públicas não têm PATCH/POST de escrita ─────────────────────
+// ── F3-3.4 público: só PATCH de checked; sem mutação de estoque ─────────────
 {
   const routesSource = readFileSync(
     join(__dirname, "../src/routes/shoppingListShareRoutes.js"),
     "utf8",
   );
-  assert.equal(routesSource.includes("router.patch"), false);
-  assert.equal(routesSource.includes("updateSharedItem"), false);
   assert.match(routesSource, /router\.get\(\s*["']\/public\/:token["']/);
-  assert.equal(
-    readFileSync(join(__dirname, "../src/services/ShoppingListShareService.js"), "utf8").includes(
-      "updateSharedItem",
-    ),
-    false,
+  assert.match(routesSource, /router\.patch\(\s*["']\/public\/:token\/items\/:itemId["']/);
+  assert.equal(routesSource.includes("stock"), false);
+  assert.equal(routesSource.includes("intake"), false);
+
+  const serviceSource = readFileSync(
+    join(__dirname, "../src/services/ShoppingListShareService.js"),
+    "utf8",
   );
+  assert.ok(serviceSource.includes("updateSharedItem"));
+  // updateSharedItem só mexe em checked
+  assert.match(serviceSource, /update\(itemId,\s*\{\s*checked\s*\}/);
 }
 
 // ── F3-3.4 revoke: não-dono → 403 ───────────────────────────────────────────
