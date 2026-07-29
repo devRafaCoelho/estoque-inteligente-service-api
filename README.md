@@ -1,8 +1,8 @@
 # Estoque Inteligente — Service API
 
-API do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa por texto (Gemini com fallback heurístico), lista de compras, dashboard, notificações, financeiro e chat com tools (propostas + rate limit).
+API do Estoque Inteligente: autenticação, produtos/estoque, entrada e baixa (texto + foto + NF-e), lista de compras, dashboard, notificações in-app, **Web Push**, e-mail transacional, financeiro e chat com tools (propostas + rate limit).
 
-A arquitetura-alvo completa (Redis, OCR, NF-e, e-mail, etc.) está em [`BACKEND.md`](./BACKEND.md) e no [`DOCUMENTACAO.md`](../DOCUMENTACAO.md) do monorepo — este README descreve **o que a API entrega hoje**.
+A arquitetura-alvo completa (Redis, filas, etc.) está em [`BACKEND.md`](./BACKEND.md) e no [`DOCUMENTACAO.md`](../DOCUMENTACAO.md) do monorepo — este README descreve **o que a API entrega hoje** (Fases 1 e 2).
 
 ## Stack
 
@@ -12,19 +12,21 @@ A arquitetura-alvo completa (Redis, OCR, NF-e, e-mail, etc.) está em [`BACKEND.
 - JWT (`jsonwebtoken`) + `bcryptjs`
 - OAuth Google (`google-auth-library`) + Apple (JWKS)
 - OpenAI SDK → Gemini (endpoint compatível; opcional)
+- Nodemailer (SMTP) + Web Push (`web-push` / VAPID)
 - Winston (logs)
 - Swagger / OpenAPI (`swagger-ui-express`)
 
-> Nesta fatia: `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico. Rate limit de IA é **em memória** (por processo).
+> Nesta fatia: `bcryptjs` (sem compilação nativa) e Express 4. **Sem** Redis/BullMQ. Google/Apple e Gemini são opcionais — sem chave, OAuth social retorna 503 e o parse de texto usa o heurístico. Rate limit de IA é **em memória** (por processo). Sem `SMTP_HOST`, e-mails vão para preview em `EMAIL_PREVIEW_DIR`. Sem chaves VAPID, push fica desabilitado na API.
 
-Camadas: `routes` → `middlewares` → `controllers` → `services` → `repositories` (+ `schemas` / `dto/v1`). Detalhes em `BACKEND.md`.
+Camadas: `routes` → `middlewares` → `controllers` → `services` → `repositories` (+ `schemas` / `dto/v1` / `mail`). Detalhes em `BACKEND.md`.
 
 ## Como rodar
 
 1. Crie o banco e aplique o schema (`database.sql` no banco `estoque_inteligente`).
-2. (Opcional) Seeds: `database_seed.sql` e/ou `database_seed_finance_history.sql`.
-3. Configure o `.env` a partir de `.env.example`.
-4. Instale e suba:
+2. Em banco **já existente** (antes da Sprint 6), rode também `database_sprint6.sql` (quiet hours + `push_subscriptions`).
+3. (Opcional) Seeds: `database_seed.sql` e/ou `database_seed_finance_history.sql`.
+4. Configure o `.env` a partir de `.env.example`.
+5. Instale e suba:
 
 ```bash
 npm install
@@ -54,6 +56,12 @@ npm run test:api
 
 O script cria usuário, cadastra produtos, registra consumo/baixa e valida status (`ok` / `low` / `out`).
 
+Digest de e-mail (opt-in; não precisa da API no ar):
+
+```bash
+npm run notifications:digest
+```
+
 ## Endpoints entregues
 
 ### Sistema e catálogos
@@ -69,15 +77,17 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/auth/register` | Cadastro e-mail/senha |
+| POST | `/api/auth/register` | Cadastro e-mail/senha (+ e-mail de boas-vindas) |
 | POST | `/api/auth/login` | Login |
+| POST | `/api/auth/forgot-password` | Solicitar reset (resposta neutra se e-mail não existir) |
+| POST | `/api/auth/reset-password` | Redefinir senha com token |
 | POST | `/api/auth/google` | Login/cadastro Google (`idToken`) |
 | POST | `/api/auth/apple` | Login/cadastro Apple (`idToken`, `fullName?`) |
 | POST | `/api/auth/link/google` | Vincular Google (JWT) |
 | POST | `/api/auth/link/apple` | Vincular Apple (JWT) |
 | GET | `/api/auth/me` | Sessão atual |
 | PATCH | `/api/users/me` | Editar perfil |
-| GET | `/api/users/me/preferences` | Preferências |
+| GET | `/api/users/me/preferences` | Preferências (alertas, push, quiet hours, digest) |
 | PATCH | `/api/users/me/preferences` | Atualizar preferências |
 | POST | `/api/users/me/password` | Definir/trocar senha |
 | DELETE | `/api/users/me` | Encerrar conta (soft-delete) |
@@ -87,7 +97,7 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/api/products` | Listar (`category`, `status`, `search`) |
-| POST | `/api/products` | Criar (cadastro manual) |
+| POST | `/api/products` | Criar (cadastro manual; `repurchaseDays` opcional) |
 | GET | `/api/products/:id` | Detalhe + histórico |
 | PATCH | `/api/products/:id` | Editar |
 | POST | `/api/products/:id/consume` | Dar baixa (quantidade) |
@@ -98,8 +108,8 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | POST | `/api/intakes/parse-text` | Texto → draft de compra (rate limit parse) |
-| POST | `/api/intakes/parse-image` | Multipart `image` → visão/LLM → draft `receipt_photo` com itens |
-| POST | `/api/intakes/parse-nf-qr` | QR/chave → collector UF (SP/MG) → draft `nf_qr` com itens |
+| POST | `/api/intakes/parse-image` | Multipart `image` → visão/LLM → draft `receipt_photo` |
+| POST | `/api/intakes/parse-nf-qr` | QR/chave → collector UF (SP/MG/BA) → draft `nf_qr` |
 | GET | `/api/intakes` | Listar (ex.: `status=draft`) |
 | POST | `/api/intakes/clear-drafts` | Limpar rascunhos |
 | GET | `/api/intakes/:id` | Preview do draft |
@@ -141,15 +151,18 @@ O script cria usuário, cadastra produtos, registra consumo/baixa e valida statu
 
 Tools / intenções: `answer`, `propose_stock_out`, `propose_shopping_list`, `finance_tip`. Propostas mutáveis **não** confirmam estoque/lista sozinhas — o client usa CTA de revisão.
 
-### Dashboard, notificações e financeiro
+### Dashboard, notificações, push e financeiro
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/api/dashboard/stats` | Contagens ok/low/out |
-| GET | `/api/notifications` | Alertas in-app |
+| GET | `/api/notifications` | Alertas in-app (+ dispara monitor) |
 | GET | `/api/notifications/unread-count` | Não lidas |
 | POST | `/api/notifications/read-all` | Marcar todas como lidas |
 | POST | `/api/notifications/:id/read` | Marcar uma como lida |
+| GET | `/api/notifications/push/config` | VAPID público + status do push |
+| POST | `/api/notifications/push/subscribe` | Registrar subscription Web Push |
+| POST | `/api/notifications/push/unsubscribe` | Remover subscription |
 | GET | `/api/finance/summary` | Resumo do mês + compras recentes |
 | GET | `/api/finance/by-category` | Gastos por categoria (`year`, `month`) |
 | GET | `/api/finance/series` | Série mensal do ano |
@@ -175,18 +188,16 @@ UPLOAD_MAX_MB=8
 
 Acima da cota: **429** com mensagem clara. Contadores em memória (reiniciam com o processo).
 
-**Cota `parse` (F2-4.3):** compartilhada entre `POST /api/intakes/parse-text`, `POST /api/intakes/parse-image` e `POST /api/stock-outs/parse-text` — texto e foto somam no mesmo limite diário (`AI_PARSE_DAILY_LIMIT`). Chat usa cota separada.
+**Cota `parse` (F2-4.3):** compartilhada entre `POST /api/intakes/parse-text`, `POST /api/intakes/parse-image` e `POST /api/stock-outs/parse-text`. Chat usa cota separada.
 
-`parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision` e itens no preview. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422** (arquivo removido).
+`parse-image` grava o arquivo em `UPLOAD_DIR/receipts/{userId}/`, envia a imagem ao Gemini (visão) com o **mesmo schema** do parse de texto, aplica matching e cria draft `source: receipt_photo` com `parser: vision`. Exige `AI_API_KEY` (sem chave → **503**). Cupom ilegível / sem itens → **422**.
 
 ### NF-e / NFC-e (Sprint 5)
 
 `POST /api/intakes/parse-nf-qr` recebe `qrContent` e/ou `accessKey` (+ `stateCode` opcional), valida a chave (44 dígitos + DV), resolve a UF na ordem **chave/URL → body → `users.default_state`**, consulta o portal da UF, faz matching e cria draft `source: nf_qr`.
 
 ```env
-# Lista de UFs com adapter ativo (ordem não importa para o match).
 NF_PRIORITY_STATES=SP,MG,BA
-# true = devolve itens mock (útil se o portal SEFAZ bloquear/captcha em dev).
 NF_MOCK_COLLECTOR=false
 ```
 
@@ -194,45 +205,68 @@ NF_MOCK_COLLECTOR=false
 
 | UF | Adapter | Portal de consulta | Status |
 |----|---------|--------------------|--------|
-| **SP** | `SpNfCollector` | `nfce.fazenda.sp.gov.br` (QR `p=chave\|…`) | Suportado |
-| **MG** | `MgNfCollector` | `portalsped.fazenda.mg.gov.br` (NFC-e) | Suportado |
-| **BA** | `BaNfCollector` | `nfe.sefaz.ba.gov.br/.../qrcode.aspx` | Suportado — **exige QR completo** (chave + CSC/hash); chave sozinha → `nf_ba_qr_required` |
+| **SP** | `SpNfCollector` | `nfce.fazenda.sp.gov.br` | Suportado |
+| **MG** | `MgNfCollector` | `portalsped.fazenda.mg.gov.br` | Suportado |
+| **BA** | `BaNfCollector` | `nfe.sefaz.ba.gov.br/.../qrcode.aspx` | Suportado — **exige QR completo** (chave + CSC/hash) |
 | Demais | — | — | **Não suportado** → **422** `nf_uf_unsupported` + `fallback: "photo"` |
 
-Não há cobertura nacional nesta fatia. Novas UFs exigem adapter dedicado (layout/URL do portal mudam por estado) — roadmap em `DOCUMENTACAO.md` (Fase 3).
+Não há cobertura nacional nesta fatia. Novas UFs → Fase 3.
 
 #### Limitações e expectativa
 
 | Tema | Comportamento real |
 |------|--------------------|
-| Só NFC-e / NF-e no consumidor | Aceitamos modelos **55** (NF-e) e **65** (NFC-e) na chave. Outros modelos → **400**. |
-| Dependência SEFAZ | A API **baixa HTML do portal estadual** e faz parse. Sem API oficial estável; HTML pode mudar sem aviso. |
-| Bahia (BA) | O portal exige o parâmetro `p` do QR **com hash**. Sem isso, **422** `nf_ba_qr_required` / `nf_invalid_qr`. Itens vêm após POSTs ASP.NET (“Visualizar em Abas” → Produtos). |
-| Captcha / bloqueio / Cloudflare | **502** `nf_captcha` ou `nf_fetch_failed` com `fallback: "photo"`. O client deve oferecer foto/OCR (Sprint 4). |
-| Timeout | Consulta HTTP ~20s; falha de rede/timeout → **502** + fallback foto. |
-| Itens ilegíveis | HTML sem tabela de produtos → **422** `nf_empty_items` + fallback foto. |
-| UF da preferência | `default_state` só preenche se a chave/URL **não** trouxer UF. A UF da **chave sempre prevalece** (scan sobrescreve preferência). |
-| UF sem adapter | Mesmo com `default_state=SP`, uma nota cuja chave é de **RJ** retorna **422** (UF da chave). |
-| Mock em dev | `NF_MOCK_COLLECTOR=true` ignora SEFAZ e devolve itens fictícios — **não use em produção**. |
-| Fora do escopo | XML autorizado, download oficial SEFAZ, cobertura nacional, fila assíncrona, cache de chave. |
+| Só NFC-e / NF-e no consumidor | Modelos **55** e **65** na chave. |
+| Dependência SEFAZ | HTML do portal estadual; pode mudar sem aviso. |
+| Captcha / bloqueio | **502** com `fallback: "photo"`. |
+| Mock em dev | `NF_MOCK_COLLECTOR=true` — **não use em produção**. |
 
-#### Códigos de erro úteis (client)
+### E-mail e Web Push (Sprint 6)
 
-| HTTP | `details.code` | O que fazer no app |
-|------|----------------|--------------------|
-| 400 | `nf_invalid_payload` | Pedir novo scan / colar chave |
-| 400 | `nf_state_required` | Pedir UF e salvar `default_state` |
-| 422 | `nf_uf_unsupported` | CTA foto (UF ainda sem adapter) |
-| 422 | `nf_ba_qr_required` / `nf_invalid_qr` | Escaneie o QR completo (BA) ou use foto |
-| 422 | `nf_empty_items` | CTA foto |
-| 502 | `nf_captcha` / `nf_fetch_failed` / `nf_collector_failed` | CTA foto; opcional “tentar QR de novo” |
+```env
+APP_URL=http://localhost:5173
+
+# SMTP — sem host, e-mails viram arquivo em EMAIL_PREVIEW_DIR
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM=noreply@estoque-inteligente.local
+EMAIL_PREVIEW_DIR=tmp/email-previews
+
+# Web Push (gere com: npx web-push generate-vapid-keys)
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:noreply@estoque-inteligente.local
+```
+
+| Canal | Comportamento |
+|-------|----------------|
+| Boas-vindas | Cadastro local e 1º login social |
+| Reset senha | `forgot-password` + `reset-password` (token com hash, TTL ~45 min) |
+| Digest | Opt-in `notifyEmailDigest`; script `npm run notifications:digest` |
+| Push | Disparo ao criar alerta elegível; respeita preferências por tipo e **quiet hours** |
+| Quiet hours | Preferências `quietHoursEnabled` / `Start` / `End` / `Timezone` (default 22:00–08:00 America/Sao_Paulo) |
+
+Templates HTML em `src/mail/emailLayout.js` (logo embutida + Nunito).
 
 ## OAuth (Google / Apple)
 
 1. Configure `GOOGLE_CLIENT_ID` / `APPLE_CLIENT_ID` no `.env` da API (mesmo Client ID do front).
 2. No front: `VITE_GOOGLE_CLIENT_ID`, `VITE_APPLE_CLIENT_ID`, `VITE_APPLE_REDIRECT_URI`.
-3. O browser obtém o `id_token` via SDK e envia para a API — teste preferencialmente pelo **client**, não pelo Swagger.
+3. O browser obtém o `id_token` via SDK e envia para a API — teste preferencialmente pelo **client**.
+
+## Fase 2 nesta API
+
+| Sprint | Entrega |
+|--------|---------|
+| S1 | Monitor: recompra, estimativa de consumo, nudge agrupado |
+| S3 | Chat com tools + rate limit |
+| S4 | `parse-image` + cota compartilhada texto/foto |
+| S5 | Collectors SP/MG/BA + fallback foto |
+| S6 | Web Push, quiet hours, reset/boas-vindas, digest opt-in |
 
 ## Fora desta entrega
 
-Mais UFs no collector NF-e (além de SP/MG/BA — ver tabela de cobertura acima), filas Redis/BullMQ, e-mail transacional, push, STT no servidor, generate de lista por IA (hoje generate = regras). Detalhes em `BACKEND.md` e `DOCUMENTACAO.md`.
+Mais UFs no collector NF-e, filas Redis/BullMQ, STT no servidor (Whisper/Gemini), generate de lista por IA (hoje generate = regras), push nativo RN. Roadmap em `DOCUMENTACAO.md` (Fases 3–4).
