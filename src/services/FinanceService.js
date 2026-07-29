@@ -1,7 +1,8 @@
 const PurchaseRepository = require("../repositories/PurchaseRepository");
+const ProductRepository = require("../repositories/ProductRepository");
 const CatalogService = require("./CatalogService");
 const { startOfDay, startOfMonth, monthRange } = require("../utils/dateRange");
-const { formatBRLAmount } = require("../utils/money");
+const { buildFinanceTips } = require("../utils/financeTips");
 
 function percentDelta(current, previous) {
   if (previous <= 0) return current > 0 ? 100 : 0;
@@ -151,63 +152,27 @@ const FinanceService = {
     const isCurrentMonth =
       range.year === now.getFullYear() && range.month === now.getMonth() + 1;
 
-    const [categoryData, catalog, summary] = await Promise.all([
+    const [categoryData, catalog, summary, products] = await Promise.all([
       this.getByCategory(userId, { year: range.year, month: range.month }),
       CatalogService.listCategories(),
       isCurrentMonth ? this.getSummary(userId) : Promise.resolve(null),
+      ProductRepository.list(userId, { active: true }),
     ]);
 
-    const tips = [];
     const categoryLabels = new Map(
       (catalog.categories || []).map((item) => [item.code, item.label]),
     );
     const byCategory = categoryData.byCategory || [];
     const monthTotal = byCategory.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 
-    if (monthTotal > 0 && byCategory.length) {
-      const top = byCategory[0];
-      const share = Math.round((Number(top.total) / monthTotal) * 100);
-      if (share >= 30) {
-        const categoryName = categoryLabels.get(top.category) || top.category;
-        tips.push({
-          id: "category_share",
-          severity: "info",
-          message: `A categoria "${categoryName}" representa ${share}% dos gastos do mês.`,
-          category: top.category,
-        });
-      }
-    }
-
-    if (monthTotal <= 0) {
-      tips.push({
-        id: "no_purchases",
-        severity: "info",
-        message:
-          "Ainda não há compras com preço neste mês. Informe o preço unitário no preview da entrada para alimentar o financeiro.",
-      });
-    } else if (isCurrentMonth && summary) {
-      if (summary.month.deltaPercent >= 20 && summary.month.previousTotal > 0) {
-        const extra = Math.max(
-          0,
-          Number(summary.month.total) - Number(summary.month.previousTotal),
-        );
-        tips.push({
-          id: "month_up",
-          severity: "warning",
-          message: `Você gastou R$ ${formatBRLAmount(extra)} a mais neste mês do que no anterior.`,
-        });
-      } else if (
-        summary.month.projectedTotal > 0 &&
-        summary.month.previousTotal > 0 &&
-        summary.month.projectedTotal > summary.month.previousTotal * 1.15
-      ) {
-        tips.push({
-          id: "month_projection",
-          severity: "warning",
-          message: `No ritmo atual, o mês pode fechar em torno de R$ ${formatBRLAmount(summary.month.projectedTotal)} (acima do mês passado).`,
-        });
-      }
-    }
+    const tips = buildFinanceTips({
+      byCategory,
+      monthTotal,
+      summary,
+      products,
+      categoryLabels,
+      isCurrentMonth,
+    });
 
     return {
       tips,

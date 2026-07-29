@@ -307,7 +307,8 @@ async function runFinanceTip(userId, args = {}) {
 
     const month = summary?.month;
     const tips = tipsPayload?.tips || [];
-    const tipText = tips[0]?.message;
+    const tipText =
+      tips.find((tip) => tip.source === "consumption")?.message || tips[0]?.message;
 
     let content = month
       ? `Neste mês você gastou R$ ${formatBRLAmount(month.total)} (${month.count} compra(s)).`
@@ -341,6 +342,8 @@ async function runFinanceTip(userId, args = {}) {
           id: tip.id,
           severity: tip.severity,
           message: tip.message,
+          source: tip.source || null,
+          category: tip.category || null,
         })),
       },
     };
