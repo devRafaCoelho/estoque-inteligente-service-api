@@ -33,6 +33,14 @@ const ShoppingListRepository = {
     return rows[0] || null;
   },
 
+  async findById(listId, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM shopping_lists WHERE id = $1 LIMIT 1`,
+      [listId],
+    );
+    return rows[0] || null;
+  },
+
   async archive(userId, listId, client = db) {
     const { rows } = await client.query(
       `UPDATE shopping_lists
