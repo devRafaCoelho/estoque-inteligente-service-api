@@ -45,6 +45,25 @@ const IntakeService = {
   },
 
   async parseNaturalLanguage(userId, text) {
+    return this.parseTextDraft(userId, text, "natural_language");
+  },
+
+  /**
+   * Compra proposta pelo chat → draft revisável (não confirma estoque).
+   * @param {string} userId
+   * @param {string} text
+   */
+  async parseFromChat(userId, text) {
+    return this.parseTextDraft(userId, text, "chat");
+  },
+
+  /**
+   * Parse de texto livre → draft de entrada (fonte natural_language ou chat).
+   * @param {string} userId
+   * @param {string} text
+   * @param {'natural_language'|'chat'} source
+   */
+  async parseTextDraft(userId, text, source = "natural_language") {
     const products = await ProductRepository.list(userId, { active: true });
     const productHints = productHintsFrom(products);
 
@@ -56,7 +75,7 @@ const IntakeService = {
       const intake = await StockIntakeRepository.create(
         {
           userId,
-          source: "natural_language",
+          source,
           status: "draft",
           rawInput: text,
           rawPayload: {
@@ -64,6 +83,7 @@ const IntakeService = {
             action: parsed.action,
             modelItems: parsed.items,
             aiConfigured: AiParseService.isConfigured(),
+            via: source === "chat" ? "propose_intake" : "intake_parse_text",
           },
         },
         client,

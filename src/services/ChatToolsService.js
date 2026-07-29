@@ -1,8 +1,10 @@
 const StockOutService = require("./StockOutService");
+const IntakeService = require("./IntakeService");
 const ShoppingListService = require("./ShoppingListService");
 const FinanceService = require("./FinanceService");
 const { buildChatContext, answerFromContext } = require("./ChatContextService");
 const { formatBRLAmount } = require("../utils/money");
+const AppError = require("../utils/AppError");
 const logger = require("../utils/logger");
 
 const TOOL_DEFINITIONS = [
@@ -46,9 +48,28 @@ const TOOL_DEFINITIONS = [
   {
     type: "function",
     function: {
+      name: "propose_intake",
+      description:
+        "Propõe uma compra/entrada de estoque a partir de texto livre. Cria um rascunho (draft) com source chat para o usuário revisar no preview — não confirma nem altera estoque.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description:
+              "Texto descrevendo a compra, ex.: 'comprei 2kg de arroz e 1 leite'",
+          },
+        },
+        required: ["text"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "propose_shopping_list",
       description:
-        "Propõe itens para a lista de compras com regras do estoque (baixos, zerados, recompra). Não grava a lista — o usuário confirma no card/CTA.",
+        "Propõe itens para a lista de compras com regras do estoque (baixos, zerados). Não grava a lista — o usuário confirma no card/CTA.",
       parameters: {
         type: "object",
         properties: {
@@ -86,6 +107,30 @@ function parseToolArgs(raw) {
   } catch {
     return {};
   }
+}
+
+/**
+ * Monta payload de proposta de entrada (puro — fácil de testar).
+ * @param {object} intake — IntakeDetailDto
+ */
+function buildProposeIntakePayload(intake) {
+  const items = intake?.items || [];
+  return {
+    type: "intake_draft",
+    tool: "propose_intake",
+    intakeId: intake.id,
+    path: `/entrada/${intake.id}/preview`,
+    cta: "review_intake",
+    requiresReview: true,
+    status: intake.status || "draft",
+    source: intake.source || "chat",
+    itemCount: items.length,
+    items: items.slice(0, 8).map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit,
+    })),
+  };
 }
 
 async function runAnswer(userId, args = {}) {
@@ -149,6 +194,52 @@ async function runProposeStockOut(userId, args = {}) {
         type: "answer",
         tool: "propose_stock_out",
         error: "parse_failed",
+        statusCode: err instanceof AppError ? err.statusCode : undefined,
+      },
+    };
+  }
+}
+
+async function runProposeIntake(userId, args = {}) {
+  const text = String(args.text || "").trim();
+  if (text.length < 3) {
+    return {
+      content:
+        "Para propor uma compra, descreva o que entrou (ex.: comprei 2kg de arroz e 1 leite).",
+      payload: { type: "answer", tool: "propose_intake", error: "text_required" },
+    };
+  }
+
+  try {
+    const intake = await IntakeService.parseFromChat(userId, text);
+    const items = intake.items || [];
+    const names = items
+      .slice(0, 5)
+      .map((item) => `${item.quantity} ${item.unit || "un"} ${item.name}`)
+      .join(", ");
+    const extra = items.length > 5 ? ` e mais ${items.length - 5}` : "";
+
+    return {
+      content: items.length
+        ? `Montei um rascunho de compra com ${items.length} item(ns): ${names}${extra}. Revise no preview — o estoque só muda depois que você confirmar.`
+        : "Criei um rascunho de compra, mas não há itens para revisar.",
+      payload: buildProposeIntakePayload(intake),
+    };
+  } catch (err) {
+    logger.warn("propose_intake falhou", {
+      message: err.message,
+      statusCode: err.statusCode,
+    });
+    const statusCode = err instanceof AppError ? err.statusCode : 500;
+    return {
+      content:
+        err.message ||
+        "Não consegui montar a compra. Tente pela tela Entrada ou reformule os itens.",
+      payload: {
+        type: "answer",
+        tool: "propose_intake",
+        error: statusCode === 503 ? "ai_unavailable" : "parse_failed",
+        statusCode,
       },
     };
   }
@@ -265,6 +356,7 @@ async function runFinanceTip(userId, args = {}) {
 const EXECUTORS = {
   answer: runAnswer,
   propose_stock_out: runProposeStockOut,
+  propose_intake: runProposeIntake,
   propose_shopping_list: runProposeShoppingList,
   finance_tip: runFinanceTip,
 };
@@ -297,9 +389,18 @@ function inferToolFromMessage(message) {
   }
 
   if (
-    /\b(lista|comprar|preciso comprar|o que (eu )?preciso|gerar lista|sugest)\b/.test(q)
+    /\b(lista|preciso comprar|o que (eu )?preciso|gerar lista|sugest)\b/.test(q)
   ) {
     return { name: "propose_shopping_list", args: { mode: "rules" } };
+  }
+
+  if (
+    /\b(comprei|compramos|comprou|compra de|registrar compra|adicionei|adicionar (ao|no) estoque|entrada de|entrou|recebi)\b/.test(
+      q,
+    ) ||
+    /\b(registre|registrar)\s+(a\s+)?compra\b/.test(q)
+  ) {
+    return { name: "propose_intake", args: { text: message } };
   }
 
   if (/\b(gast|financ|dica|orcament|orçament|projec|quanto\s+(foi|saiu))\b/.test(q)) {
@@ -314,6 +415,7 @@ const ChatToolsService = {
   executeTool,
   inferToolFromMessage,
   parseToolArgs,
+  buildProposeIntakePayload,
 };
 
 module.exports = ChatToolsService;

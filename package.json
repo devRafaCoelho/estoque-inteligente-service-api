@@ -12,6 +12,7 @@
     "test:nudge": "node tests/nudgeSuggestedQuantity.test.mjs",
     "test:stock-rules": "node tests/stockRules.test.mjs",
     "test:nudge-policy": "node tests/consumptionNudgePolicy.test.mjs",
+    "test:propose-intake": "node tests/proposeIntake.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {
