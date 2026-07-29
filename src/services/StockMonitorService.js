@@ -6,6 +6,7 @@ const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 const NotificationDispatchService = require("./NotificationDispatchService");
 const stockStatus = require("../utils/stockStatus");
 const { isRepurchaseDue, MS_PER_DAY } = require("../utils/stockRules");
+const { buildQuickConsumeNudgePayload } = require("../utils/consumptionEstimate");
 const logger = require("../utils/logger");
 
 const STOCK_DEDUP_HOURS = 72;
@@ -133,20 +134,10 @@ async function ensureMissingConsumptionNudge(userId, prefs) {
     title,
     body,
     productId: count === 1 ? overdue[0].productId : null,
-    payload: {
-      action: "open_quick_consume",
+    payload: buildQuickConsumeNudgePayload({
+      candidates: overdue,
       nudgeDays: days,
-      overdueCount: count,
-      productIds: overdue.map((item) => item.productId),
-      items: overdue.slice(0, 8).map((item) => ({
-        productId: item.productId,
-        name: item.name,
-        daysSinceLastOut: item.daysSinceLastOut,
-        expectedCycleDays: item.expectedCycleDays,
-        avgWeeklyUsage: item.avgWeeklyUsage,
-        unit: item.unit,
-      })),
-    },
+    }),
   });
   return true;
 }
@@ -169,17 +160,31 @@ async function ensureConsumptionNudge(userId, prefs) {
     ? `Faz ${days} dias sem nenhuma baixa no estoque — quer revisar o que usou?`
     : `Você ainda não registrou baixas. Quando consumir algo, registre para manter o estoque atualizado.`;
 
+  const estimates = await ConsumptionEstimateService.listEstimates(userId);
+  const withEstimate = estimates
+    .filter(
+      (item) =>
+        Number(item.quantity) > 0 &&
+        (item.avgWeeklyUsage != null || item.expectedCycleDays != null),
+    )
+    .sort(
+      (a, b) =>
+        (b.avgWeeklyUsage || 0) - (a.avgWeeklyUsage || 0) ||
+        a.name.localeCompare(b.name),
+    );
+
   await NotificationDispatchService.createNotification({
     userId,
     type: "consumption_nudge",
     title: "Não esqueceu de dar baixa?",
     body,
-    productId: null,
-    payload: {
-      action: "open_quick_consume",
+    productId:
+      withEstimate.length === 1 ? withEstimate[0].productId : null,
+    payload: buildQuickConsumeNudgePayload({
+      candidates: withEstimate,
       nudgeDays: days,
-      productsWithStock: withStock.length,
-    },
+      extra: { productsWithStock: withStock.length },
+    }),
   });
   return true;
 }

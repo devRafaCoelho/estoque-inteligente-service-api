@@ -240,6 +240,86 @@ function buildProductEstimate(product, movements = [], now = new Date()) {
   };
 }
 
+/**
+ * Quantidade “usual” sugerida para uma baixa rápida (editável no client).
+ * Só calcula quando há estimativa de uso; não inventa do zero.
+ * Limita ao estoque atual quando conhecido.
+ */
+function suggestedUsualQuantity(estimate) {
+  if (!estimate) return null;
+
+  const weekly = Number(estimate.avgWeeklyUsage);
+  const cycle = Number(estimate.expectedCycleDays);
+  const stock = Number(estimate.quantity);
+
+  let qty = null;
+  if (Number.isFinite(weekly) && weekly > 0 && Number.isFinite(cycle) && cycle > 0) {
+    qty = weekly * (cycle / 7);
+  } else if (Number.isFinite(weekly) && weekly > 0) {
+    qty = weekly;
+  }
+
+  if (qty == null || !Number.isFinite(qty) || qty <= 0) return null;
+
+  qty = round1(qty);
+  if (qty >= 1) {
+    const nearest = Math.round(qty);
+    if (Math.abs(qty - nearest) < 0.15) qty = nearest;
+  }
+
+  if (Number.isFinite(stock) && stock > 0) {
+    qty = Math.min(qty, stock);
+  }
+
+  return qty > 0 ? qty : null;
+}
+
+/**
+ * Item de payload de nudge a partir de uma estimativa.
+ */
+function toNudgePayloadItem(estimate) {
+  const suggestedQuantity = suggestedUsualQuantity(estimate);
+  return {
+    productId: estimate.productId,
+    name: estimate.name,
+    daysSinceLastOut: estimate.daysSinceLastOut ?? null,
+    expectedCycleDays: estimate.expectedCycleDays ?? null,
+    avgWeeklyUsage: estimate.avgWeeklyUsage ?? null,
+    unit: estimate.unit || null,
+    ...(suggestedQuantity != null ? { suggestedQuantity } : {}),
+  };
+}
+
+/**
+ * Payload de missing_consumption / consumption_nudge com suggestedQuantity.
+ */
+function buildQuickConsumeNudgePayload({
+  candidates = [],
+  nudgeDays,
+  extra = {},
+}) {
+  const items = candidates.slice(0, 8).map(toNudgePayloadItem);
+  const productIds = candidates.map((c) => c.productId).filter(Boolean);
+  const primary = candidates[0] || null;
+  const suggestedQuantity = primary ? suggestedUsualQuantity(primary) : null;
+
+  return {
+    action: "open_quick_consume",
+    nudgeDays,
+    overdueCount: candidates.length,
+    productIds,
+    items,
+    ...(primary && candidates.length === 1
+      ? {
+          productId: primary.productId,
+          unit: primary.unit || null,
+          ...(suggestedQuantity != null ? { suggestedQuantity } : {}),
+        }
+      : {}),
+    ...extra,
+  };
+}
+
 module.exports = {
   MIN_OUTS_FOR_INTERVAL,
   MIN_OUTS_FOR_STABLE,
@@ -251,4 +331,7 @@ module.exports = {
   trimIntervalOutliers,
   computePersistedConsumptionStats,
   buildProductEstimate,
+  suggestedUsualQuantity,
+  toNudgePayloadItem,
+  buildQuickConsumeNudgePayload,
 };
