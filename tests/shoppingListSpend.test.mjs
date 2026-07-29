@@ -35,6 +35,9 @@ const { estimateShoppingListSpend } = require("../src/utils/shoppingListSpend");
   assert.equal(estimate.estimatedTotal, 10);
   assert.equal(estimate.isPartial, true);
   assert.equal(estimate.unpricedItemCount, 1);
+  assert.equal(estimate.unpricedItems.length, 1);
+  assert.equal(estimate.unpricedItems[0].name, "Item manual");
+  assert.equal(estimate.unpricedItems[0].canSetPrice, false);
 }
 
 {
@@ -44,6 +47,24 @@ const { estimateShoppingListSpend } = require("../src/utils/shoppingListSpend");
   );
   assert.equal(estimate.hasEstimate, false);
   assert.equal(estimate.estimatedTotal, 0);
+}
+
+{
+  const estimate = estimateShoppingListSpend(
+    [
+      { product_id: "p1", name: "Café", suggested_qty: 1, unit: "pct", checked: false },
+      { product_id: "p2", name: "Arroz", suggested_qty: 2, unit: "kg", checked: false },
+    ],
+    new Map([
+      ["p1", { avg_unit_price: null, unit: "pct" }],
+      ["p2", { avg_unit_price: 8, unit: "kg" }],
+    ]),
+  );
+  assert.equal(estimate.estimatedTotal, 16);
+  assert.equal(estimate.isPartial, true);
+  assert.equal(estimate.unpricedItems.length, 1);
+  assert.equal(estimate.unpricedItems[0].productId, "p1");
+  assert.equal(estimate.unpricedItems[0].canSetPrice, true);
 }
 
 console.log("shoppingListSpend.test.mjs: ok");

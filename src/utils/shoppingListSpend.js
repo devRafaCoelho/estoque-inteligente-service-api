@@ -39,17 +39,36 @@ function estimateShoppingListSpend(items = [], productsById = new Map(), options
   let pricedItemCount = 0;
   let unpricedItemCount = 0;
   const considered = [];
+  const unpricedItems = [];
+  const seenUnpricedProducts = new Set();
 
   for (const item of items || []) {
     const checked = Boolean(item.checked);
     if (onlyPending && checked) continue;
 
     const qty = suggestedQtyOf(item);
-    const product = getProduct(productKey(item));
+    const productId = productKey(item);
+    const product = getProduct(productId);
     const unitPrice = unitPriceOf(product);
+    const unit = item.unit || product?.unit || "un";
+    const name = item.name || product?.name || "Item";
 
-    if (qty == null || unitPrice == null) {
+    if (qty == null) continue;
+
+    if (unitPrice == null) {
       unpricedItemCount += 1;
+      const dedupeKey = productId || `name:${String(name).toLowerCase()}`;
+      if (!seenUnpricedProducts.has(dedupeKey)) {
+        seenUnpricedProducts.add(dedupeKey);
+        unpricedItems.push({
+          itemId: item.id || null,
+          productId,
+          name,
+          quantity: qty,
+          unit,
+          canSetPrice: Boolean(productId),
+        });
+      }
       continue;
     }
 
@@ -58,10 +77,10 @@ function estimateShoppingListSpend(items = [], productsById = new Map(), options
     pricedItemCount += 1;
     considered.push({
       itemId: item.id || null,
-      productId: productKey(item),
-      name: item.name,
+      productId,
+      name,
       quantity: qty,
-      unit: item.unit || product?.unit || "un",
+      unit,
       unitPrice,
       lineTotal,
     });
@@ -75,6 +94,7 @@ function estimateShoppingListSpend(items = [], productsById = new Map(), options
     isPartial: pricedItemCount > 0 && unpricedItemCount > 0,
     hasEstimate: pricedItemCount > 0,
     lines: considered,
+    unpricedItems,
   };
 }
 

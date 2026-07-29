@@ -34,6 +34,16 @@ const ShoppingListDto = (list, items = [], viewMode = "paper", spendEstimate = n
         unpricedItemCount: Number(spendEstimate.unpricedItemCount) || 0,
         isPartial: Boolean(spendEstimate.isPartial),
         hasEstimate: Boolean(spendEstimate.hasEstimate),
+        unpricedItems: Array.isArray(spendEstimate.unpricedItems)
+          ? spendEstimate.unpricedItems.map((row) => ({
+              itemId: row.itemId || null,
+              productId: row.productId || null,
+              name: row.name,
+              quantity: row.quantity != null ? Number(row.quantity) : null,
+              unit: row.unit || "un",
+              canSetPrice: Boolean(row.canSetPrice),
+            }))
+          : [],
       }
     : null,
 });
