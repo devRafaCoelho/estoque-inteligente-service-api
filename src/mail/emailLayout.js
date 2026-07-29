@@ -236,9 +236,38 @@ function digestEmail({ firstName, notifications }) {
   };
 }
 
+function householdInviteEmail({
+  inviteeFirstName,
+  inviterName,
+  householdName,
+  inviteUrl,
+  ttlDays,
+}) {
+  const name = inviteeFirstName || "olá";
+  const who = inviterName || "Alguém";
+  const house = householdName || "uma conta familiar";
+  return {
+    subject: `${who} convidou você para ${house} · Estoque Inteligente`,
+    ...renderEmailLayout({
+      preheader: `Convite para entrar em ${house}. Válido por ${ttlDays} dias.`,
+      eyebrow: "Conta familiar",
+      title: `${name}, você foi convidado(a)`,
+      greeting: `${who} quer compartilhar o estoque da casa com você.`,
+      paragraphs: [
+        `Ao aceitar, você passa a fazer parte de “${house}” no Estoque Inteligente.`,
+        `O convite é válido por ${ttlDays} dias.`,
+      ],
+      ctaLabel: "Aceitar convite",
+      ctaHref: inviteUrl,
+      footnote: "Se você não esperava este e-mail, pode ignorá-lo com tranquilidade.",
+    }),
+  };
+}
+
 module.exports = {
   welcomeEmail,
   passwordResetEmail,
   digestEmail,
+  householdInviteEmail,
   appUrl,
 };

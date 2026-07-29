@@ -12,6 +12,7 @@ const stockUnitRoutes = require("./stockUnitRoutes");
 const brazilianStateRoutes = require("./brazilianStateRoutes");
 const chatRoutes = require("./chatRoutes");
 const shoppingListShareRoutes = require("./shoppingListShareRoutes");
+const householdRoutes = require("./householdRoutes");
 
 function setRoutes(app) {
   app.use("/api/auth", authRoutes);
@@ -29,6 +30,7 @@ function setRoutes(app) {
   app.use("/api/stock-units", stockUnitRoutes);
   app.use("/api/brazilian-states", brazilianStateRoutes);
   app.use("/api/chat", chatRoutes);
+  app.use("/api/households", householdRoutes);
 }
 
 module.exports = setRoutes;
