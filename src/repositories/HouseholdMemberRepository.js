@@ -48,6 +48,16 @@ const HouseholdMemberRepository = {
     );
     return rows[0] || null;
   },
+
+  async countByHousehold(householdId, client = db) {
+    const { rows } = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM household_members
+       WHERE household_id = $1`,
+      [householdId],
+    );
+    return rows[0]?.count || 0;
+  },
 };
 
 module.exports = HouseholdMemberRepository;

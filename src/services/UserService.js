@@ -67,6 +67,10 @@ const UserService = {
   },
 
   async deleteAccount(userId) {
+    // F3-4.4: owner com membros ativos não pode apagar a conta
+    const HouseholdService = require("./HouseholdService");
+    await HouseholdService.assertCanDeleteAccount(userId);
+
     await UserAuthIdentityRepository.deactivateByUserId(userId);
     await UserRepository.softDelete(userId);
     return { deleted: true };

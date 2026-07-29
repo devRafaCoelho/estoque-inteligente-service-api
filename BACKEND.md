@@ -370,7 +370,7 @@ module.exports = value;
 - `requestLogger` — log HTTP via Winston (`method`, `path`, `status`, `durationMs`, `userId`)
 - `errorHandler` + `AppError` + `asyncHandler`
 
-Toda query de domínio **sempre** filtra por `user_id = req.user.id`.
+Toda query de domínio de **produtos e listas** filtra pelo **escopo ativo** (`resolveScope`): solo → `user_id` + `household_id IS NULL`; em household → `household_id`. Ver README (seção Conta familiar).
 
 ---
 

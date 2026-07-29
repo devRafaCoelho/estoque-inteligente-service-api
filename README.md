@@ -23,7 +23,11 @@ Camadas: `routes` → `middlewares` → `controllers` → `services` → `reposi
 ## Como rodar
 
 1. Crie o banco e aplique o schema (`database.sql` no banco `estoque_inteligente`).
-2. Em banco **já existente** (antes da Sprint 6), rode também `database_sprint6.sql` (quiet hours + `push_subscriptions`).
+2. Em banco **já existente**, rode as migrações incrementais na ordem:
+   - `database_sprint6.sql` (quiet hours + `push_subscriptions`)
+   - `database_sprint3_f3_share.sql` (links de lista)
+   - `database_sprint4_f3_households.sql` (conta familiar)
+   - `database_sprint4_f3_household_scope.sql` (escopo `household_id` em produtos/listas)
 3. (Opcional) Seeds: `database_seed.sql` e/ou `database_seed_finance_history.sql`.
 4. Configure o `.env` a partir de `.env.example`.
 5. Instale e suba:
@@ -250,6 +254,50 @@ VAPID_SUBJECT=mailto:noreply@estoque-inteligente.local
 | Quiet hours | Preferências `quietHoursEnabled` / `Start` / `End` / `Timezone` (default 22:00–08:00 America/Sao_Paulo) |
 
 Templates HTML em `src/mail/emailLayout.js` (logo embutida + Nunito).
+
+## Conta familiar e escopo de dados (Fase 3 — Sprint 4)
+
+### Modelo (F3-4.1)
+
+- Tabelas: `households`, `household_members`, `household_invites`
+- Rotas autenticadas em `/api/households`:
+  - `POST /` criar · `GET /me` · `POST /invites/accept`
+  - `GET|POST /:id/invites` · `DELETE /:id/invites/:inviteId`
+  - `GET /:id/members` · `DELETE /:id/members/:userId` · `POST /:id/leave`
+
+### Escopo de estoque/lista (F3-4.2)
+
+Migração gradual: contas existentes continuam **solo** (`household_id IS NULL`).
+
+| Contexto | Filtro em `products` / `shopping_lists` |
+|----------|----------------------------------------|
+| Solo (sem membership) | `user_id = me AND household_id IS NULL` |
+| Membro/dono de household | `household_id = casa ativa` |
+
+Regras:
+
+- `resolveScope(userId)` em `src/utils/resolveScope.js` define o contexto ativo.
+- Ao **criar** a casa, produtos e listas solo do **owner** recebem `household_id` (backfill).
+- Novos produtos/listas criados por qualquer membro da casa já nascem com `household_id`.
+- Há no máximo **uma lista ativa** por usuário solo **ou** por household (índices parciais).
+- **Notificações** (v1) continuam por `user_id` do destinatário — não são filtradas por household ainda.
+- Intakes/baixas/chat permanecem pessoais (`user_id`); o estoque que eles alteram já respeita o escopo do produto.
+
+Isolamento: membro da casa A **não** lê produtos com `household_id` da casa B.
+
+### Regras owner vs member (F3-4.4)
+
+| Ação | Owner | Member |
+|------|-------|--------|
+| Ver estoque/lista da casa | sim | sim |
+| Convidar / cancelar convite | sim | 403 |
+| Remover membro | sim | 403 |
+| Remover o owner | — | 422 (bloqueado) |
+| Sair da casa (`POST /:id/leave`) | só se for o único membro (dissolve a casa) | sim (dados da casa permanecem) |
+| Excluir conta (`DELETE /api/users/me`) | 409 se ainda houver outros membros | permitido (sai da casa antes) |
+| Compartilhar lista (link) | dono da lista **ou** owner da casa | 403 se só member |
+
+Convites cancelados usam soft-delete (`revoked_at`).
 
 ## OAuth (Google / Apple)
 

@@ -34,6 +34,25 @@ const HouseholdController = {
     );
     return res.status(200).json(result);
   },
+
+  async listInvites(req, res) {
+    const result = await HouseholdService.listInvites(req.user.id, req.params.id);
+    return res.status(200).json(result);
+  },
+
+  async revokeInvite(req, res) {
+    const result = await HouseholdService.revokeInvite(
+      req.user.id,
+      req.params.id,
+      req.params.inviteId,
+    );
+    return res.status(200).json(result);
+  },
+
+  async leave(req, res) {
+    const result = await HouseholdService.leave(req.user.id, req.params.id);
+    return res.status(200).json(result);
+  },
 };
 
 module.exports = HouseholdController;

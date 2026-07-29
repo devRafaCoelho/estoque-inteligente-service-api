@@ -25,14 +25,20 @@ router.post(
   asyncHandler(HouseholdController.acceptInvite),
 );
 router.get("/:id/members", asyncHandler(HouseholdController.listMembers));
+router.get("/:id/invites", asyncHandler(HouseholdController.listInvites));
 router.post(
   "/:id/invites",
   validateSchema(inviteHouseholdSchema),
   asyncHandler(HouseholdController.invite),
 );
 router.delete(
+  "/:id/invites/:inviteId",
+  asyncHandler(HouseholdController.revokeInvite),
+);
+router.delete(
   "/:id/members/:userId",
   asyncHandler(HouseholdController.removeMember),
 );
+router.post("/:id/leave", asyncHandler(HouseholdController.leave));
 
 module.exports = router;

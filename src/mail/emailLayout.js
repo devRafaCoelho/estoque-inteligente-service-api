@@ -78,10 +78,10 @@ function renderEmailLayout({
 
   const ctaHtml =
     ctaLabel && ctaHref
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;">
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 24px;">
           <tr>
-            <td style="border-radius:999px;background:${BRAND.green};">
-              <a href="${escapeHtml(ctaHref)}" style="display:inline-block;padding:14px 28px;color:#ffffff;text-decoration:none;font-family:${fontStack};font-weight:800;font-size:15px;">
+            <td align="center" valign="middle" bgcolor="${BRAND.green}" style="border-radius:999px;background-color:${BRAND.green};text-align:center;vertical-align:middle;mso-padding-alt:14px 28px;">
+              <a href="${escapeHtml(ctaHref)}" style="display:inline-block;padding:14px 28px;color:#ffffff !important;text-decoration:none;font-family:${fontStack};font-weight:800;font-size:15px;line-height:1.2;text-align:center;vertical-align:middle;mso-line-height-rule:exactly;">
                 ${escapeHtml(ctaLabel)}
               </a>
             </td>
@@ -114,7 +114,7 @@ function renderEmailLayout({
               <img src="cid:${LOGO_CID}" alt="${escapeHtml(BRAND.name)}" width="168" style="display:block;margin:0 auto 14px;max-width:168px;height:auto;border:0;" />
               ${
                 eyebrow
-                  ? `<p style="margin:0;font-family:${fontStack};font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.82);font-weight:700;">${escapeHtml(eyebrow)}</p>`
+                  ? `<p style="margin:0;font-family:${fontStack};font-size:18px;line-height:1.3;letter-spacing:0.1em;text-transform:uppercase;color:#ffffff;font-weight:800;">${escapeHtml(eyebrow)}</p>`
                   : ""
               }
             </td>

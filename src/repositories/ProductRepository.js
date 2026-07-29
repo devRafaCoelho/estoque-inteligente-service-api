@@ -1,10 +1,12 @@
 const db = require("../config/db");
+const { resolveScope, appendScopeWhere } = require("../utils/resolveScope");
 
 const ProductRepository = {
   async list(userId, filters = {}, client = db) {
-    const where = ["user_id = $1"];
-    const values = [userId];
-    let i = 2;
+    const scope = await resolveScope(userId, client);
+    const where = [];
+    const values = [];
+    let i = appendScopeWhere(where, values, scope, 1);
 
     if (filters.active !== undefined) {
       where.push(`active = $${i++}`);
@@ -41,30 +43,40 @@ const ProductRepository = {
   },
 
   async findById(userId, id, client = db) {
+    const scope = await resolveScope(userId, client);
+    const where = ["id = $1"];
+    const values = [id];
+    appendScopeWhere(where, values, scope, 2);
     const { rows } = await client.query(
-      "SELECT * FROM products WHERE id = $1 AND user_id = $2 LIMIT 1",
-      [id, userId],
+      `SELECT * FROM products WHERE ${where.join(" AND ")} LIMIT 1`,
+      values,
     );
     return rows[0] || null;
   },
 
   async findByName(userId, name, client = db) {
+    const scope = await resolveScope(userId, client);
+    const where = ["LOWER(name) = LOWER($1)"];
+    const values = [name];
+    appendScopeWhere(where, values, scope, 2);
     const { rows } = await client.query(
-      "SELECT * FROM products WHERE user_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1",
-      [userId, name],
+      `SELECT * FROM products WHERE ${where.join(" AND ")} LIMIT 1`,
+      values,
     );
     return rows[0] || null;
   },
 
   async create(userId, data, client = db) {
+    const scope = await resolveScope(userId, client);
     const lastPurchasedAt = Number(data.quantity) > 0 ? new Date() : null;
     const { rows } = await client.query(
       `INSERT INTO products
-        (user_id, name, category, quantity, unit, min_quantity, avg_unit_price, repurchase_days, notes, last_purchased_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (user_id, household_id, name, category, quantity, unit, min_quantity, avg_unit_price, repurchase_days, notes, last_purchased_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         userId,
+        scope.householdId,
         data.name,
         data.category,
         data.quantity,
@@ -80,6 +92,7 @@ const ProductRepository = {
   },
 
   async update(userId, id, fields, client = db) {
+    const scope = await resolveScope(userId, client);
     const allowed = {
       name: "name",
       category: "category",
@@ -102,10 +115,12 @@ const ProductRepository = {
     }
     if (!sets.length) return this.findById(userId, id, client);
     sets.push("updated_at = NOW()");
-    values.push(id, userId);
+    values.push(id);
+    const where = [`id = $${i}`];
+    appendScopeWhere(where, values, scope, i + 1);
     const { rows } = await client.query(
       `UPDATE products SET ${sets.join(", ")}
-       WHERE id = $${i++} AND user_id = $${i}
+       WHERE ${where.join(" AND ")}
        RETURNING *`,
       values,
     );
@@ -113,13 +128,17 @@ const ProductRepository = {
   },
 
   async setQuantity(userId, id, quantity, { consumed = false } = {}, client = db) {
+    const scope = await resolveScope(userId, client);
     const extra = consumed ? ", last_consumed_at = NOW()" : "";
+    const values = [quantity, id];
+    const where = ["id = $2"];
+    appendScopeWhere(where, values, scope, 3);
     const { rows } = await client.query(
       `UPDATE products
        SET quantity = $1, updated_at = NOW()${extra}
-       WHERE id = $2 AND user_id = $3
+       WHERE ${where.join(" AND ")}
        RETURNING *`,
-      [quantity, id, userId],
+      values,
     );
     return rows[0] || null;
   },
@@ -133,19 +152,33 @@ const ProductRepository = {
     { avgWeeklyUsage, consumptionCycleDays },
     client = db,
   ) {
+    const scope = await resolveScope(userId, client);
+    const values = [avgWeeklyUsage, consumptionCycleDays, id];
+    const where = ["id = $3"];
+    appendScopeWhere(where, values, scope, 4);
     const { rows } = await client.query(
       `UPDATE products
        SET avg_weekly_usage = $1,
            consumption_cycle_days = $2,
            updated_at = NOW()
-       WHERE id = $3 AND user_id = $4
+       WHERE ${where.join(" AND ")}
        RETURNING *`,
-      [avgWeeklyUsage, consumptionCycleDays, id, userId],
+      values,
     );
     return rows[0] || null;
   },
 
   async applyIntake(userId, id, { quantity, avgUnitPrice, unit, category }, client = db) {
+    const scope = await resolveScope(userId, client);
+    const values = [
+      quantity,
+      avgUnitPrice,
+      unit || null,
+      category || null,
+      id,
+    ];
+    const where = ["id = $5"];
+    appendScopeWhere(where, values, scope, 6);
     const { rows } = await client.query(
       `UPDATE products
        SET quantity = $1,
@@ -154,11 +187,24 @@ const ProductRepository = {
            category = COALESCE($4, category),
            last_purchased_at = NOW(),
            updated_at = NOW()
-       WHERE id = $5 AND user_id = $6
+       WHERE ${where.join(" AND ")}
        RETURNING *`,
-      [quantity, avgUnitPrice, unit || null, category || null, id, userId],
+      values,
     );
     return rows[0] || null;
+  },
+
+  /**
+   * Atribui produtos solo do usuário ao household (backfill ao criar casa).
+   */
+  async attachSoloToHousehold(userId, householdId, client = db) {
+    const { rowCount } = await client.query(
+      `UPDATE products
+       SET household_id = $1, updated_at = NOW()
+       WHERE user_id = $2 AND household_id IS NULL`,
+      [householdId, userId],
+    );
+    return rowCount || 0;
   },
 };
 

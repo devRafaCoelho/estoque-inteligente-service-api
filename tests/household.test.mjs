@@ -60,6 +60,10 @@ const { ROLES } = HouseholdService;
   const origCreate = HouseholdRepository.create;
   const origMember = HouseholdMemberRepository.create;
   const origTx = db.withTransaction;
+  const ProductRepository = require("../src/repositories/ProductRepository");
+  const ShoppingListRepository = require("../src/repositories/ShoppingListRepository");
+  const origAttachProducts = ProductRepository.attachSoloToHousehold;
+  const origAttachLists = ShoppingListRepository.attachSoloToHousehold;
 
   HouseholdRepository.findOwnedByUser = async () => null;
   HouseholdRepository.findForUser = async () => null;
@@ -71,10 +75,16 @@ const { ROLES } = HouseholdService;
     updated_at: new Date(),
   });
   let memberRole = null;
+  let attachedHouseholdId = null;
   HouseholdMemberRepository.create = async ({ role }) => {
     memberRole = role;
     return { id: "m1", role };
   };
+  ProductRepository.attachSoloToHousehold = async (_uid, hid) => {
+    attachedHouseholdId = hid;
+    return 2;
+  };
+  ShoppingListRepository.attachSoloToHousehold = async () => 1;
   db.withTransaction = async (fn) => fn({});
 
   const result = await HouseholdService.create("owner-1", { name: "Família Coelho" });
@@ -83,10 +93,13 @@ const { ROLES } = HouseholdService;
   HouseholdRepository.findForUser = origForUser;
   HouseholdRepository.create = origCreate;
   HouseholdMemberRepository.create = origMember;
+  ProductRepository.attachSoloToHousehold = origAttachProducts;
+  ShoppingListRepository.attachSoloToHousehold = origAttachLists;
   db.withTransaction = origTx;
 
   assert.equal(result.household.name, "Família Coelho");
   assert.equal(memberRole, ROLES.OWNER);
+  assert.equal(attachedHouseholdId, "h-new");
 }
 
 // ── invite: não-owner → 403 ──────────────────────────────────────────────────
@@ -440,6 +453,126 @@ const { ROLES } = HouseholdService;
   HouseholdMemberRepository.findByHouseholdAndUser = orig;
   assert.ok(caught instanceof AppError);
   assert.equal(caught.statusCode, 403);
+}
+
+// ── leave: member sai e perde acesso ─────────────────────────────────────────
+{
+  const origMem = HouseholdMemberRepository.findByHouseholdAndUser;
+  const origRemove = HouseholdMemberRepository.remove;
+  let removed = null;
+  HouseholdMemberRepository.findByHouseholdAndUser = async () => ({
+    role: ROLES.MEMBER,
+    user_id: "m1",
+  });
+  HouseholdMemberRepository.remove = async (hid, uid) => {
+    removed = { hid, uid };
+    return { id: "x" };
+  };
+
+  const result = await HouseholdService.leave("m1", "h1");
+  HouseholdMemberRepository.findByHouseholdAndUser = origMem;
+  HouseholdMemberRepository.remove = origRemove;
+
+  assert.equal(result.left, true);
+  assert.equal(result.dissolved, false);
+  assert.deepEqual(removed, { hid: "h1", uid: "m1" });
+}
+
+// ── leave: owner com outros membros → 422 ────────────────────────────────────
+{
+  const origMem = HouseholdMemberRepository.findByHouseholdAndUser;
+  const origCount = HouseholdMemberRepository.countByHousehold;
+  HouseholdMemberRepository.findByHouseholdAndUser = async () => ({
+    role: ROLES.OWNER,
+  });
+  HouseholdMemberRepository.countByHousehold = async () => 2;
+
+  let caught = null;
+  try {
+    await HouseholdService.leave("owner", "h1");
+  } catch (err) {
+    caught = err;
+  }
+  HouseholdMemberRepository.findByHouseholdAndUser = origMem;
+  HouseholdMemberRepository.countByHousehold = origCount;
+
+  assert.ok(caught instanceof AppError);
+  assert.equal(caught.statusCode, 422);
+}
+
+// ── leave: owner solo dissolve a casa ────────────────────────────────────────
+{
+  const origMem = HouseholdMemberRepository.findByHouseholdAndUser;
+  const origCount = HouseholdMemberRepository.countByHousehold;
+  const origRemove = HouseholdMemberRepository.remove;
+  const origDelete = HouseholdRepository.deleteById;
+  const origTx = db.withTransaction;
+  let deletedId = null;
+
+  HouseholdMemberRepository.findByHouseholdAndUser = async () => ({
+    role: ROLES.OWNER,
+  });
+  HouseholdMemberRepository.countByHousehold = async () => 1;
+  HouseholdMemberRepository.remove = async () => ({ id: "m" });
+  HouseholdRepository.deleteById = async (id) => {
+    deletedId = id;
+    return { id };
+  };
+  db.withTransaction = async (fn) => fn({});
+
+  const result = await HouseholdService.leave("owner", "h-solo");
+  HouseholdMemberRepository.findByHouseholdAndUser = origMem;
+  HouseholdMemberRepository.countByHousehold = origCount;
+  HouseholdMemberRepository.remove = origRemove;
+  HouseholdRepository.deleteById = origDelete;
+  db.withTransaction = origTx;
+
+  assert.equal(result.dissolved, true);
+  assert.equal(deletedId, "h-solo");
+}
+
+// ── revokeInvite: member → 403 ───────────────────────────────────────────────
+{
+  const orig = HouseholdMemberRepository.findByHouseholdAndUser;
+  HouseholdMemberRepository.findByHouseholdAndUser = async () => ({
+    role: ROLES.MEMBER,
+  });
+  let caught = null;
+  try {
+    await HouseholdService.revokeInvite("m1", "h1", "inv1");
+  } catch (err) {
+    caught = err;
+  }
+  HouseholdMemberRepository.findByHouseholdAndUser = orig;
+  assert.ok(caught instanceof AppError);
+  assert.equal(caught.statusCode, 403);
+}
+
+// ── assertCanDeleteAccount: owner com membros → 409 ──────────────────────────
+{
+  const origForUser = HouseholdRepository.findForUser;
+  const origMem = HouseholdMemberRepository.findByHouseholdAndUser;
+  const origCount = HouseholdMemberRepository.countByHousehold;
+
+  HouseholdRepository.findForUser = async () => ({ id: "h1" });
+  HouseholdMemberRepository.findByHouseholdAndUser = async () => ({
+    role: ROLES.OWNER,
+  });
+  HouseholdMemberRepository.countByHousehold = async () => 3;
+
+  let caught = null;
+  try {
+    await HouseholdService.assertCanDeleteAccount("owner");
+  } catch (err) {
+    caught = err;
+  }
+
+  HouseholdRepository.findForUser = origForUser;
+  HouseholdMemberRepository.findByHouseholdAndUser = origMem;
+  HouseholdMemberRepository.countByHousehold = origCount;
+
+  assert.ok(caught instanceof AppError);
+  assert.equal(caught.statusCode, 409);
 }
 
 console.log("household.test.mjs: ok");

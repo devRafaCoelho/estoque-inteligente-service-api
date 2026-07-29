@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { resolveScope, appendScopeWhere } = require("../utils/resolveScope");
 
 const ShoppingListItemRepository = {
   async listByList(listId, client = db) {
@@ -16,13 +17,17 @@ const ShoppingListItemRepository = {
   },
 
   async findById(userId, itemId, client = db) {
+    const scope = await resolveScope(userId, client);
+    const where = ["i.id = $1"];
+    const values = [itemId];
+    appendScopeWhere(where, values, scope, 2, { alias: "l" });
     const { rows } = await client.query(
       `SELECT i.*
        FROM shopping_list_items i
        JOIN shopping_lists l ON l.id = i.shopping_list_id
-       WHERE i.id = $1 AND l.user_id = $2
+       WHERE ${where.join(" AND ")}
        LIMIT 1`,
-      [itemId, userId],
+      values,
     );
     return rows[0] || null;
   },

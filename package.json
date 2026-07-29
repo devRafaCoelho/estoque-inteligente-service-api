@@ -18,6 +18,7 @@
     "test:shopping-share": "node tests/shoppingListShare.test.mjs",
     "test:shopping-share-privacy": "node tests/shoppingListSharePrivacy.test.mjs",
     "test:household": "node tests/household.test.mjs",
+    "test:household-scope": "node tests/householdScope.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

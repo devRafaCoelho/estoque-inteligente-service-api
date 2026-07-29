@@ -4,6 +4,7 @@ const ShoppingListRepository = require("../repositories/ShoppingListRepository")
 const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepository");
 const ShoppingListShareRepository = require("../repositories/ShoppingListShareRepository");
 const ProductRepository = require("../repositories/ProductRepository");
+const HouseholdMemberRepository = require("../repositories/HouseholdMemberRepository");
 const { SharedShoppingListDto } = require("../dto/v1/shoppingListDto");
 const { estimateShoppingListSpend } = require("../utils/shoppingListSpend");
 
@@ -41,6 +42,19 @@ async function resolveValidShare(rawToken) {
   return { share, list };
 }
 
+/** Dono da lista ou owner do household da lista. */
+async function assertCanManageListShare(userId, list) {
+  if (list.user_id === userId) return;
+  if (list.household_id) {
+    const membership = await HouseholdMemberRepository.findByHouseholdAndUser(
+      list.household_id,
+      userId,
+    );
+    if (membership?.role === "owner") return;
+  }
+  throw new AppError("Sem permissão para compartilhar esta lista", 403);
+}
+
 async function buildSharedListDto(share, list) {
   const items = await ShoppingListItemRepository.listByList(list.id);
 
@@ -69,9 +83,7 @@ const ShoppingListShareService = {
   async createShare(userId) {
     const list = await ShoppingListRepository.findActive(userId);
     if (!list) throw new AppError("Nenhuma lista ativa para compartilhar", 404);
-    if (list.user_id !== userId) {
-      throw new AppError("Sem permissão para compartilhar esta lista", 403);
-    }
+    await assertCanManageListShare(userId, list);
 
     const raw = generateToken();
     const tokenHash = hashToken(raw);

@@ -5,6 +5,8 @@ const HouseholdRepository = require("../repositories/HouseholdRepository");
 const HouseholdMemberRepository = require("../repositories/HouseholdMemberRepository");
 const HouseholdInviteRepository = require("../repositories/HouseholdInviteRepository");
 const UserRepository = require("../repositories/UserRepository");
+const ProductRepository = require("../repositories/ProductRepository");
+const ShoppingListRepository = require("../repositories/ShoppingListRepository");
 const EmailService = require("./EmailService");
 const { householdInviteEmail, appUrl } = require("../mail/emailLayout");
 const { buildDisplayName } = require("../helpers/personName");
@@ -88,6 +90,13 @@ const HouseholdService = {
       );
       await HouseholdMemberRepository.create(
         { householdId: created.id, userId, role: ROLES.OWNER },
+        client,
+      );
+      // F3-4.2: estoque/lista solo do dono passam a ser da casa
+      await ProductRepository.attachSoloToHousehold(userId, created.id, client);
+      await ShoppingListRepository.attachSoloToHousehold(
+        userId,
+        created.id,
         client,
       );
       return created;
@@ -281,6 +290,96 @@ const HouseholdService = {
 
     await HouseholdMemberRepository.remove(householdId, targetUserId);
     return { removed: true, userId: targetUserId };
+  },
+
+  /**
+   * Lista convites abertos (somente owner).
+   */
+  async listInvites(userId, householdId) {
+    const membership = await requireMembership(householdId, userId);
+    assertOwner(membership);
+    const rows = await HouseholdInviteRepository.listOpenByHousehold(householdId);
+    return { invites: rows.map(HouseholdInviteDto) };
+  },
+
+  /**
+   * Soft-delete de convite (revoked_at). Somente owner.
+   */
+  async revokeInvite(userId, householdId, inviteId) {
+    const membership = await requireMembership(householdId, userId);
+    assertOwner(membership);
+
+    const invite = await HouseholdInviteRepository.findById(inviteId);
+    if (!invite || invite.household_id !== householdId) {
+      throw new AppError("Convite não encontrado", 404);
+    }
+    if (invite.accepted_at) {
+      throw new AppError("Convite já foi aceito", 409);
+    }
+    if (invite.revoked_at) {
+      throw new AppError("Convite já foi cancelado", 409);
+    }
+
+    const revoked = await HouseholdInviteRepository.revokeById(inviteId);
+    if (!revoked) throw new AppError("Convite não encontrado", 404);
+    return { revoked: true, inviteId };
+  },
+
+  /**
+   * Sai da conta familiar.
+   * - Member: remove membership; dados da casa permanecem.
+   * - Owner único: encerra a casa (DELETE household → products/lists household_id SET NULL).
+   * - Owner com outros membros: 422 (precisa remover membros ou transferir).
+   */
+  async leave(userId, householdId) {
+    const membership = await requireMembership(householdId, userId);
+
+    if (membership.role === ROLES.OWNER) {
+      const count = await HouseholdMemberRepository.countByHousehold(householdId);
+      if (count > 1) {
+        throw new AppError(
+          "O dono não pode sair enquanto houver outros membros. Remova os membros ou transfira a conta antes.",
+          422,
+        );
+      }
+
+      await db.withTransaction(async (client) => {
+        await HouseholdMemberRepository.remove(householdId, userId, client);
+        await HouseholdRepository.deleteById(householdId, client);
+      });
+
+      return { left: true, dissolved: true, householdId };
+    }
+
+    await HouseholdMemberRepository.remove(householdId, userId);
+    return { left: true, dissolved: false, householdId };
+  },
+
+  /**
+   * Bloqueia exclusão de conta se o usuário for owner com outros membros.
+   * Se for member (ou owner sozinho), encerra o vínculo familiar antes.
+   */
+  async assertCanDeleteAccount(userId) {
+    const household = await HouseholdRepository.findForUser(userId);
+    if (!household) return;
+
+    const membership = await HouseholdMemberRepository.findByHouseholdAndUser(
+      household.id,
+      userId,
+    );
+    if (!membership) return;
+
+    if (membership.role === ROLES.OWNER) {
+      const count = await HouseholdMemberRepository.countByHousehold(household.id);
+      if (count > 1) {
+        throw new AppError(
+          "Não é possível excluir a conta sendo dono de uma família com outros membros. Remova os membros ou saia da conta familiar primeiro.",
+          409,
+        );
+      }
+    }
+
+    await this.leave(userId, household.id);
   },
 };
 

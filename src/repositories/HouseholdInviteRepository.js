@@ -73,6 +73,40 @@ const HouseholdInviteRepository = {
     );
     return rows[0] || null;
   },
+
+  async listOpenByHousehold(householdId, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM household_invites
+       WHERE household_id = $1
+         AND accepted_at IS NULL
+         AND revoked_at IS NULL
+         AND expires_at > NOW()
+       ORDER BY created_at DESC`,
+      [householdId],
+    );
+    return rows;
+  },
+
+  async findById(id, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM household_invites WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    return rows[0] || null;
+  },
+
+  async revokeById(id, client = db) {
+    const { rows } = await client.query(
+      `UPDATE household_invites
+       SET revoked_at = NOW()
+       WHERE id = $1
+         AND accepted_at IS NULL
+         AND revoked_at IS NULL
+       RETURNING *`,
+      [id],
+    );
+    return rows[0] || null;
+  },
 };
 
 module.exports = HouseholdInviteRepository;
