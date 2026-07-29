@@ -10,6 +10,7 @@
     "test:rate-limit": "node tests/aiRateLimit.test.mjs",
     "test:consumption": "node tests/consumptionEstimate.test.mjs",
     "test:nudge": "node tests/nudgeSuggestedQuantity.test.mjs",
+    "test:stock-rules": "node tests/stockRules.test.mjs",
     "notifications:digest": "node src/scripts/sendNotificationDigests.js"
   },
   "dependencies": {

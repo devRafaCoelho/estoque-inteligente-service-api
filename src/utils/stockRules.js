@@ -17,6 +17,10 @@ function isRepurchaseDue(product, now = Date.now()) {
 
 /**
  * Origem sugerida para item de lista de compras (regras).
+ * Só inclui necessidade real de reposição no estoque (zerado / acabando).
+ * Ciclo de recompra vencido com estoque saudável fica só no lembrete
+ * (StockMonitor), para não lotar a lista com itens ainda em quantidade ok.
+ *
  * @returns {{ origin: string, priority: 'high'|'medium'|'low' } | null}
  */
 function resolveShoppingListOrigin(product, now = Date.now()) {
@@ -26,9 +30,6 @@ function resolveShoppingListOrigin(product, now = Date.now()) {
   }
   if (status === "low") {
     return { origin: "low_stock", priority: "high" };
-  }
-  if (isRepurchaseDue(product, now)) {
-    return { origin: "repurchase_time", priority: "medium" };
   }
   return null;
 }
