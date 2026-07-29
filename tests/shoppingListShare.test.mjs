@@ -58,8 +58,8 @@ const ShoppingListShareService = require("../src/services/ShoppingListShareServi
 // ── 4. ShoppingListShareService.revokeShare lança 404 se share não existe ───
 {
   const ShoppingListShareRepo = require("../src/repositories/ShoppingListShareRepository");
-  const origRevoke = ShoppingListShareRepo.revoke;
-  ShoppingListShareRepo.revoke = async () => null;
+  const origFind = ShoppingListShareRepo.findById;
+  ShoppingListShareRepo.findById = async () => null;
 
   let caught = null;
   try {
@@ -67,7 +67,7 @@ const ShoppingListShareService = require("../src/services/ShoppingListShareServi
   } catch (err) {
     caught = err;
   }
-  ShoppingListShareRepo.revoke = origRevoke;
+  ShoppingListShareRepo.findById = origFind;
 
   assert.ok(caught instanceof AppError, "Deve lançar AppError se share não encontrado");
   assert.equal(caught.statusCode, 404);
@@ -191,10 +191,12 @@ const ShoppingListShareService = require("../src/services/ShoppingListShareServi
   ShoppingListItemRepo.listByList = origListItems;
   ProductRepo.list = origListProducts;
 
-  assert.equal(result.id, "list-2");
+  assert.equal(result.title, "Lista ativa");
+  assert.equal(Object.hasOwn(result, "id"), false);
   assert.ok(Array.isArray(result.items));
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0].name, "Arroz");
+  assert.equal(Object.hasOwn(result.items[0], "productId"), false);
 }
 
 // ── 9. listShares retorna array vazio sem lista ativa ────────────────────────

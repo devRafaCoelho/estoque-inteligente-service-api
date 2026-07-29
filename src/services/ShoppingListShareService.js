@@ -1,11 +1,10 @@
 const crypto = require("node:crypto");
-const db = require("../config/db");
 const AppError = require("../utils/AppError");
 const ShoppingListRepository = require("../repositories/ShoppingListRepository");
 const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepository");
 const ShoppingListShareRepository = require("../repositories/ShoppingListShareRepository");
 const ProductRepository = require("../repositories/ProductRepository");
-const { ShoppingListDto } = require("../dto/v1/shoppingListDto");
+const { SharedShoppingListDto } = require("../dto/v1/shoppingListDto");
 const { estimateShoppingListSpend } = require("../utils/shoppingListSpend");
 
 /** TTL padrão: 7 dias */
@@ -45,6 +44,7 @@ async function resolveValidShare(rawToken) {
 async function buildSharedListDto(share, list) {
   const items = await ShoppingListItemRepository.listByList(list.id);
 
+  // Só preços dos produtos que estão nesta lista (não vaza catálogo).
   const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
   const productsById = new Map();
   if (productIds.length) {
@@ -58,26 +58,31 @@ async function buildSharedListDto(share, list) {
     onlyPending: true,
   });
 
-  const viewMode = list.view_mode || "paper";
-  return ShoppingListDto(list, items, viewMode, spendEstimate);
+  return SharedShoppingListDto(list, items, spendEstimate);
 }
 
 const ShoppingListShareService = {
   /**
-   * Cria um link compartilhável para a lista ativa do usuário.
+   * Cria um link compartilhável para a lista ativa do usuário (somente dono).
    * Retorna o token raw (só aqui) e os metadados do share.
    */
   async createShare(userId) {
     const list = await ShoppingListRepository.findActive(userId);
     if (!list) throw new AppError("Nenhuma lista ativa para compartilhar", 404);
+    if (list.user_id !== userId) {
+      throw new AppError("Sem permissão para compartilhar esta lista", 403);
+    }
 
     const raw = generateToken();
     const tokenHash = hashToken(raw);
     const exp = expiresAt();
 
-    const share = await ShoppingListShareRepository.create(
-      { listId: list.id, userId, tokenHash, expiresAt: exp },
-    );
+    const share = await ShoppingListShareRepository.create({
+      listId: list.id,
+      userId,
+      tokenHash,
+      expiresAt: exp,
+    });
 
     return {
       shareId: share.id,
@@ -88,39 +93,32 @@ const ShoppingListShareService = {
   },
 
   /**
-   * Revoga um share específico do usuário.
-   * 404 se não encontrar ou já revogado.
+   * Revoga um share. Somente o dono (403 se outro usuário).
+   * Invalidação imediata (revoked_at).
    */
   async revokeShare(userId, shareId) {
+    const share = await ShoppingListShareRepository.findById(shareId);
+    if (!share) throw new AppError("Compartilhamento não encontrado", 404);
+    if (share.user_id !== userId) {
+      throw new AppError("Sem permissão para revogar este compartilhamento", 403);
+    }
+    if (share.revoked_at) {
+      throw new AppError("Compartilhamento já revogado", 404);
+    }
+
     const revoked = await ShoppingListShareRepository.revoke(userId, shareId);
     if (!revoked) throw new AppError("Compartilhamento não encontrado ou já revogado", 404);
     return { revoked: true, shareId };
   },
 
   /**
-   * Lê a lista via token público (sem autenticação).
+   * Lê a lista via token público (sem autenticação) — somente leitura (v1).
    * 404 se token inválido/expirado/revogado.
-   * 410 se a lista não estiver mais ativa (status != active).
+   * 410 se a lista não estiver mais ativa.
    */
   async getSharedList(rawToken) {
     const { share, list } = await resolveValidShare(rawToken);
     return buildSharedListDto(share, list);
-  },
-
-  /**
-   * Marca/desmarca item via token público (somente checked).
-   */
-  async updateSharedItem(rawToken, itemId, { checked } = {}) {
-    if (typeof checked !== "boolean") {
-      throw new AppError("Informe checked (boolean)", 422);
-    }
-    const { share, list } = await resolveValidShare(rawToken);
-    const item = await ShoppingListItemRepository.findByIdInList(list.id, itemId);
-    if (!item) throw new AppError("Item não encontrado nesta lista", 404);
-
-    const updated = await ShoppingListItemRepository.update(itemId, { checked });
-    const dto = await buildSharedListDto(share, list);
-    return { list: dto, item: dto.items.find((row) => row.id === updated?.id) || null };
   },
 
   /** Lista shares ativos da lista ativa do usuário. */

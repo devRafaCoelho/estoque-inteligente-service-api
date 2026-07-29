@@ -48,4 +48,49 @@ const ShoppingListDto = (list, items = [], viewMode = "paper", spendEstimate = n
     : null,
 });
 
-module.exports = { ShoppingListItemDto, ShoppingListDto };
+/**
+ * DTO público do compartilhamento (F3-3.3).
+ * Sem userId, productId, financeiro detalhado nem metadados internos.
+ */
+const SharedShoppingListItemDto = (row) => ({
+  id: row.id,
+  name: row.name,
+  suggestedQty: row.suggested_qty != null ? Number(row.suggested_qty) : null,
+  unit: row.unit || "un",
+  priority: row.priority,
+  checked: Boolean(row.checked),
+});
+
+const SharedShoppingListDto = (list, items = [], spendEstimate = null) => {
+  const mapped = items.map(SharedShoppingListItemDto);
+  const rank = { high: 0, medium: 1, low: 2 };
+  mapped.sort((a, b) => {
+    if (Boolean(a.checked) !== Boolean(b.checked)) return a.checked ? 1 : -1;
+    return (rank[a.priority] ?? 9) - (rank[b.priority] ?? 9);
+  });
+
+  return {
+    title: list.title,
+    items: mapped,
+    stats: {
+      total: mapped.length,
+      checked: mapped.filter((i) => i.checked).length,
+      pending: mapped.filter((i) => !i.checked).length,
+    },
+    spendEstimate: spendEstimate?.hasEstimate
+      ? {
+          currency: spendEstimate.currency || "BRL",
+          estimatedTotal: Number(spendEstimate.estimatedTotal) || 0,
+          isPartial: Boolean(spendEstimate.isPartial),
+          hasEstimate: true,
+        }
+      : null,
+  };
+};
+
+module.exports = {
+  ShoppingListItemDto,
+  ShoppingListDto,
+  SharedShoppingListItemDto,
+  SharedShoppingListDto,
+};

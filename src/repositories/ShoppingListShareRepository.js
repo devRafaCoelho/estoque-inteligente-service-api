@@ -24,6 +24,15 @@ const ShoppingListShareRepository = {
     return rows[0] || null;
   },
 
+  /** Busca share por id (qualquer status). */
+  async findById(shareId, client = db) {
+    const { rows } = await client.query(
+      `SELECT * FROM shopping_list_shares WHERE id = $1 LIMIT 1`,
+      [shareId],
+    );
+    return rows[0] || null;
+  },
+
   /** Lista shares ativos do usuário para a lista informada. */
   async listActiveByUser(userId, listId, client = db) {
     const { rows } = await client.query(

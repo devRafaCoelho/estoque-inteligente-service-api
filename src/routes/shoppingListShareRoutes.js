@@ -1,28 +1,17 @@
 const { Router } = require("express");
-const Joi = require("joi");
 const ShoppingListShareController = require("../controllers/ShoppingListShareController");
 const validateAuthentication = require("../middlewares/validateAuthentication");
-const validateSchema = require("../middlewares/validateSchema");
 const asyncHandler = require("../utils/asyncHandler");
-
-const updateSharedItemSchema = Joi.object({
-  checked: Joi.boolean().required(),
-});
 
 const router = Router();
 
-// Rotas públicas — leitura e marcação de itens via token
+// Público v1 — somente leitura (GET). Sem POST/PATCH públicos.
 router.get(
   "/public/:token",
   asyncHandler(ShoppingListShareController.getSharedList),
 );
-router.patch(
-  "/public/:token/items/:itemId",
-  validateSchema(updateSharedItemSchema),
-  asyncHandler(ShoppingListShareController.updateSharedItem),
-);
 
-// Rotas autenticadas
+// Rotas autenticadas (somente dono da lista)
 router.use(validateAuthentication);
 
 router.get("/", asyncHandler(ShoppingListShareController.listShares));
