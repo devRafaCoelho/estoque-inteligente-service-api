@@ -8,7 +8,24 @@ const errorHandler = require("./middlewares/errorHandler");
 
 const app = express();
 
-app.use(cors({ origin: env.CORS_ORIGIN }));
+/** CORS_ORIGIN aceita uma origem ou várias separadas por vírgula. */
+const corsOrigins = String(env.CORS_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // requests sem Origin (curl, health, same-origin server-side)
+      if (!origin) return callback(null, true);
+      if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+  }),
+);
 app.use(express.json({ limit: "2mb" }));
 app.use(requestLogger);
 

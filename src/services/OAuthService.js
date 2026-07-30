@@ -110,7 +110,7 @@ const OAuthService = {
         firstName: user.first_name || buildDisplayName(user).split(/\s+/)[0],
         provider,
       });
-      await EmailService.send({
+      await EmailService.sendSafe({
         to: user.email,
         ...mail,
       });

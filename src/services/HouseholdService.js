@@ -195,7 +195,7 @@ const HouseholdService = {
       inviteUrl,
       ttlDays: INVITE_TTL_DAYS,
     });
-    await EmailService.send({ to: normalized, ...mail });
+    await EmailService.sendSafe({ to: normalized, ...mail });
 
     return {
       invite: HouseholdInviteDto(invite),

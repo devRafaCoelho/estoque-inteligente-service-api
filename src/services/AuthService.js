@@ -56,7 +56,7 @@ const AuthService = {
       firstName: user.first_name || buildDisplayName(user).split(/\s+/)[0],
       provider: "local",
     });
-    await EmailService.send({
+    await EmailService.sendSafe({
       to: user.email,
       ...mail,
     });

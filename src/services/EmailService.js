@@ -13,6 +13,9 @@ function getTransporter() {
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: env.SMTP_SECURE,
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
     auth:
       env.SMTP_USER || env.SMTP_PASS
         ? { user: env.SMTP_USER, pass: env.SMTP_PASS }
@@ -59,6 +62,24 @@ const EmailService = {
     if (!tx) return writePreview(mail);
     await tx.sendMail(mail);
     return { delivered: true };
+  },
+
+  /**
+   * Envio best-effort: nunca quebra o fluxo de negócio se SMTP falhar/timeout.
+   * Útil em cadastro/convite (já persistidos) no Render free / Gmail lento.
+   */
+  async sendSafe(payload) {
+    try {
+      return await this.send(payload);
+    } catch (err) {
+      logger.error("Falha ao enviar e-mail (fluxo segue sem e-mail)", {
+        to: payload?.to,
+        subject: payload?.subject,
+        message: err.message,
+        code: err.code,
+      });
+      return { delivered: false, error: err.message };
+    }
   },
 };
 
