@@ -211,12 +211,15 @@ const HouseholdService = {
       inviteUrl,
       ttlDays: INVITE_TTL_DAYS,
     });
-    await EmailService.sendSafe({ to: normalized, ...mail });
+    const mailResult = await EmailService.sendSafe({ to: normalized, ...mail });
+    const emailDelivered = Boolean(mailResult?.delivered);
 
     return {
       invite: HouseholdInviteDto(invite),
-      // token raw só aqui (dev/testes); e-mail carrega o link
+      // token raw só na criação (não é persistido em claro); use para montar/copiar o link
       token: raw,
+      inviteUrl,
+      emailDelivered,
     };
   },
 
