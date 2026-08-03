@@ -43,6 +43,17 @@ const HouseholdRepository = {
     return rows[0] || null;
   },
 
+  async updateName(id, name, client = db) {
+    const { rows } = await client.query(
+      `UPDATE households
+       SET name = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, name],
+    );
+    return rows[0] || null;
+  },
+
   async deleteById(id, client = db) {
     const { rows } = await client.query(
       `DELETE FROM households WHERE id = $1 RETURNING *`,

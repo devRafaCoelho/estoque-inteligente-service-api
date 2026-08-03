@@ -105,6 +105,22 @@ const HouseholdService = {
     return { household: HouseholdDto(household) };
   },
 
+  /**
+   * Renomeia a conta familiar. Apenas o dono.
+   */
+  async update(userId, householdId, { name } = {}) {
+    const membership = await requireMembership(householdId, userId);
+    assertOwner(membership);
+
+    const trimmed = String(name || "").trim();
+    if (!trimmed) throw new AppError("Informe o nome da conta familiar", 422);
+
+    const household = await HouseholdRepository.updateName(householdId, trimmed);
+    if (!household) throw new AppError("Conta familiar não encontrada", 404);
+
+    return { household: HouseholdDto(household) };
+  },
+
   async getMine(userId) {
     const household = await HouseholdRepository.findForUser(userId);
     if (!household) return { household: null, membership: null };

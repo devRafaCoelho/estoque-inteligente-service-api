@@ -5,6 +5,7 @@ const FinanceService = require("./FinanceService");
 const { buildChatContext, answerFromContext } = require("./ChatContextService");
 const { formatBRLAmount } = require("../utils/money");
 const { summarizeIntakeConfidence } = require("../utils/intakeConfidence");
+const { itemCountLabel, pendingCountLabel } = require("../utils/ptPlural");
 const AppError = require("../utils/AppError");
 const logger = require("../utils/logger");
 
@@ -173,11 +174,14 @@ async function runProposeStockOut(userId, args = {}) {
       .slice(0, 5)
       .map((item) => `${item.quantity} ${item.unit || "un"} ${item.name}`)
       .join(", ");
-    const extra = items.length > 5 ? ` e mais ${items.length - 5}` : "";
+    const extra =
+      items.length > 5
+        ? ` e mais ${itemCountLabel(items.length - 5)}`
+        : "";
 
     return {
       content: items.length
-        ? `Montei um rascunho de baixa com ${items.length} item(ns): ${names}${extra}. Revise antes de confirmar.`
+        ? `Montei um rascunho de baixa com ${itemCountLabel(items.length)}: ${names}${extra}. Revise antes de confirmar.`
         : "Criei um rascunho de baixa, mas não há itens para revisar.",
       payload: {
         type: "stock_out_draft",
@@ -227,15 +231,18 @@ async function runProposeIntake(userId, args = {}) {
       .slice(0, 5)
       .map((item) => `${item.quantity} ${item.unit || "un"} ${item.name}`)
       .join(", ");
-    const extra = items.length > 5 ? ` e mais ${items.length - 5}` : "";
+    const extra =
+      items.length > 5
+        ? ` e mais ${itemCountLabel(items.length - 5)}`
+        : "";
 
     let content;
     if (!items.length) {
       content = "Criei um rascunho de compra, mas não há itens para revisar.";
     } else if (payload.hasLowConfidenceItems) {
-      content = `Montei um rascunho de compra com ${items.length} item(ns): ${names}${extra}. Há ${payload.lowConfidenceCount} item(ns) com baixa confiança — revise no preview antes de confirmar (o estoque só muda depois).`;
+      content = `Montei um rascunho de compra com ${itemCountLabel(items.length)}: ${names}${extra}. Há ${itemCountLabel(payload.lowConfidenceCount)} com baixa confiança — revise no preview antes de confirmar (o estoque só muda depois).`;
     } else {
-      content = `Montei um rascunho de compra com ${items.length} item(ns): ${names}${extra}. Revise no preview — o estoque só muda depois que você confirmar.`;
+      content = `Montei um rascunho de compra com ${itemCountLabel(items.length)}: ${names}${extra}. Revise no preview — o estoque só muda depois que você confirmar.`;
     }
 
     return { content, payload };
@@ -273,11 +280,11 @@ async function runProposeShoppingList(userId, args = {}) {
 
     let content;
     if (newItems.length > 0) {
-      content = `Sugeri ${newItems.length} item(ns) para a lista: ${names.join(", ")}${
+      content = `Sugeri ${itemCountLabel(newItems.length)} para a lista: ${names.join(", ")}${
         newItems.length > 8 ? "…" : ""
       }. Salve para aplicar — nada foi gravado ainda.`;
     } else if (preview.pendingCount > 0) {
-      content = `Não há itens novos pelas regras agora. Sua lista já tem ${preview.pendingCount} pendente(s): ${pendingNames.join(", ") || "—"}.`;
+      content = `Não há itens novos pelas regras agora. Sua lista já tem ${pendingCountLabel(preview.pendingCount)}: ${pendingNames.join(", ") || "—"}.`;
     } else {
       content = "Pelas regras do estoque, não há sugestões novas para a lista no momento.";
     }

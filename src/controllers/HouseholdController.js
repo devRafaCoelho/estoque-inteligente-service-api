@@ -6,6 +6,15 @@ const HouseholdController = {
     return res.status(201).json(result);
   },
 
+  async update(req, res) {
+    const result = await HouseholdService.update(
+      req.user.id,
+      req.params.id,
+      req.body,
+    );
+    return res.status(200).json(result);
+  },
+
   async getMine(req, res) {
     const result = await HouseholdService.getMine(req.user.id);
     return res.status(200).json(result);

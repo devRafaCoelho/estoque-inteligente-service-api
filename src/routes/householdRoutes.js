@@ -5,6 +5,7 @@ const validateSchema = require("../middlewares/validateSchema");
 const asyncHandler = require("../utils/asyncHandler");
 const {
   createHouseholdSchema,
+  updateHouseholdSchema,
   inviteHouseholdSchema,
   acceptHouseholdInviteSchema,
 } = require("../schemas/householdSchemas");
@@ -23,6 +24,11 @@ router.post(
   "/invites/accept",
   validateSchema(acceptHouseholdInviteSchema),
   asyncHandler(HouseholdController.acceptInvite),
+);
+router.patch(
+  "/:id",
+  validateSchema(updateHouseholdSchema),
+  asyncHandler(HouseholdController.update),
 );
 router.get("/:id/members", asyncHandler(HouseholdController.listMembers));
 router.get("/:id/invites", asyncHandler(HouseholdController.listInvites));
