@@ -684,6 +684,38 @@ const paths = {
         404: { $ref: "#/components/responses/NotFound" },
       },
     },
+    delete: {
+      tags: ["Products"],
+      summary: "Excluir produto (soft-delete)",
+      description:
+        "Marca o produto como excluído. Preserva histórico de movimentos e compras; remove o item da lista de compras.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string", format: "uuid" },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Produto excluído",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  deleted: { type: "boolean" },
+                  productId: { type: "string", format: "uuid" },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: "#/components/responses/Unauthorized" },
+        404: { $ref: "#/components/responses/NotFound" },
+      },
+    },
   },
 
   "/api/products/{id}/consume": {

@@ -24,6 +24,7 @@ router.post(
 );
 router.get("/:id", asyncHandler(ProductController.get));
 router.patch("/:id", validateSchema(updateProductSchema), asyncHandler(ProductController.update));
+router.delete("/:id", asyncHandler(ProductController.remove));
 router.post(
   "/:id/consume",
   validateSchema(consumeProductSchema),

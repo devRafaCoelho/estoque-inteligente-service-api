@@ -273,6 +273,7 @@ CREATE TABLE products (
   repurchase_days   INTEGER,
   notes             TEXT,
   active            BOOLEAN NOT NULL DEFAULT TRUE,
+  deleted_at        TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -283,11 +284,13 @@ CREATE INDEX idx_products_household ON products (household_id)
 CREATE INDEX idx_products_user_category ON products (user_id, category);
 CREATE INDEX idx_products_user_qty ON products (user_id, quantity);
 CREATE INDEX idx_products_low_stock ON products (user_id)
-  WHERE active = TRUE AND quantity > 0 AND quantity <= min_quantity;
+  WHERE active = TRUE AND deleted_at IS NULL AND quantity > 0 AND quantity <= min_quantity;
 CREATE INDEX idx_products_out ON products (user_id)
-  WHERE active = TRUE AND quantity = 0;
+  WHERE active = TRUE AND deleted_at IS NULL AND quantity = 0;
 CREATE INDEX idx_products_last_consumed ON products (user_id, last_consumed_at)
-  WHERE active = TRUE;
+  WHERE active = TRUE AND deleted_at IS NULL;
+CREATE INDEX idx_products_alive ON products (user_id)
+  WHERE deleted_at IS NULL;
 CREATE INDEX idx_products_name_trgm ON products USING gin (name gin_trgm_ops);
 
 CREATE TABLE product_aliases (

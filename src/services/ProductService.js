@@ -1,6 +1,7 @@
 const AppError = require("../utils/AppError");
 const ProductRepository = require("../repositories/ProductRepository");
 const StockMovementRepository = require("../repositories/StockMovementRepository");
+const ShoppingListItemRepository = require("../repositories/ShoppingListItemRepository");
 const StockMonitorService = require("./StockMonitorService");
 const ConsumptionEstimateService = require("./ConsumptionEstimateService");
 const { ProductListDto, ProductDetailDto } = require("../dto/v1/productDto");
@@ -204,6 +205,24 @@ const ProductService = {
       StockMonitorService.evaluateUserSafe(userId);
       return result;
     });
+  },
+
+  /**
+   * Soft-delete: mantém movimentos/compras; remove o produto da lista de compras.
+   */
+  async remove(userId, id) {
+    const deleted = await db.withTransaction(async (client) => {
+      const product = await ProductRepository.findById(userId, id, client);
+      if (!product) throw new AppError("Produto não encontrado", 404);
+
+      await ShoppingListItemRepository.deleteByProductId(id, client);
+      const row = await ProductRepository.softDelete(userId, id, client);
+      if (!row) throw new AppError("Produto não encontrado", 404);
+      return row;
+    });
+
+    StockMonitorService.evaluateUserSafe(userId);
+    return { deleted: true, productId: deleted.id };
   },
 };
 

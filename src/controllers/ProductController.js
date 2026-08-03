@@ -36,6 +36,11 @@ const ProductController = {
     const product = await ProductService.markOut(req.user.id, req.params.id);
     return res.status(200).json({ product });
   },
+
+  async remove(req, res) {
+    const result = await ProductService.remove(req.user.id, req.params.id);
+    return res.status(200).json(result);
+  },
 };
 
 module.exports = ProductController;

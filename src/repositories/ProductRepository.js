@@ -8,6 +8,8 @@ const ProductRepository = {
     const values = [];
     let i = appendScopeWhere(where, values, scope, 1);
 
+    where.push("deleted_at IS NULL");
+
     if (filters.active !== undefined) {
       where.push(`active = $${i++}`);
       values.push(filters.active);
@@ -44,7 +46,7 @@ const ProductRepository = {
 
   async findById(userId, id, client = db) {
     const scope = await resolveScope(userId, client);
-    const where = ["id = $1"];
+    const where = ["id = $1", "deleted_at IS NULL"];
     const values = [id];
     appendScopeWhere(where, values, scope, 2);
     const { rows } = await client.query(
@@ -56,7 +58,7 @@ const ProductRepository = {
 
   async findByName(userId, name, client = db) {
     const scope = await resolveScope(userId, client);
-    const where = ["LOWER(name) = LOWER($1)"];
+    const where = ["LOWER(name) = LOWER($1)", "deleted_at IS NULL"];
     const values = [name];
     appendScopeWhere(where, values, scope, 2);
     const { rows } = await client.query(
@@ -201,10 +203,31 @@ const ProductRepository = {
     const { rowCount } = await client.query(
       `UPDATE products
        SET household_id = $1, updated_at = NOW()
-       WHERE user_id = $2 AND household_id IS NULL`,
+       WHERE user_id = $2 AND household_id IS NULL AND deleted_at IS NULL`,
       [householdId, userId],
     );
     return rowCount || 0;
+  },
+
+  /**
+   * Soft-delete: preserva stock_movements / purchase_items (histórico).
+   * Itens de lista de compras devem ser limpos no serviço.
+   */
+  async softDelete(userId, id, client = db) {
+    const scope = await resolveScope(userId, client);
+    const values = [id];
+    const where = ["id = $1", "deleted_at IS NULL"];
+    appendScopeWhere(where, values, scope, 2);
+    const { rows } = await client.query(
+      `UPDATE products
+       SET active = FALSE,
+           deleted_at = NOW(),
+           updated_at = NOW()
+       WHERE ${where.join(" AND ")}
+       RETURNING *`,
+      values,
+    );
+    return rows[0] || null;
   },
 };
 

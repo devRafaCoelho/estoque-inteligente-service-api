@@ -6,6 +6,7 @@ const db = require("./config/db");
 const logger = require("./utils/logger");
 const GoogleAuthService = require("./services/GoogleAuthService");
 const { ensureReferenceData } = require("./bootstrap/ensureReferenceData");
+const { ensureSchemaMigrations } = require("./bootstrap/ensureSchemaMigrations");
 
 const server = app.listen(env.PORT, () => {
   logger.info(`estoque-inteligente-api rodando na porta ${env.PORT}`);
@@ -14,6 +15,7 @@ const server = app.listen(env.PORT, () => {
 async function warmUp() {
   try {
     await db.warmUp();
+    await ensureSchemaMigrations();
     await ensureReferenceData();
   } catch (err) {
     logger.warn("Falha ao aquecer conexão com o PostgreSQL", { error: err.message });

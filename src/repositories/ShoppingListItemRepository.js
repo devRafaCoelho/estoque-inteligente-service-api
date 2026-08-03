@@ -128,6 +128,15 @@ const ShoppingListItemRepository = {
     );
     return rowCount || 0;
   },
+
+  /** Remove vínculos da lista ao excluir um produto (evita item órfão / preço quebrado). */
+  async deleteByProductId(productId, client = db) {
+    const { rowCount } = await client.query(
+      "DELETE FROM shopping_list_items WHERE product_id = $1",
+      [productId],
+    );
+    return rowCount || 0;
+  },
 };
 
 module.exports = ShoppingListItemRepository;
