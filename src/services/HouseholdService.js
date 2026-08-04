@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../config/db");
 const AppError = require("../utils/AppError");
+const logger = require("../utils/logger");
 const HouseholdRepository = require("../repositories/HouseholdRepository");
 const HouseholdMemberRepository = require("../repositories/HouseholdMemberRepository");
 const HouseholdInviteRepository = require("../repositories/HouseholdInviteRepository");
@@ -214,12 +215,23 @@ const HouseholdService = {
     const mailResult = await EmailService.sendSafe({ to: normalized, ...mail });
     const emailDelivered = Boolean(mailResult?.delivered);
 
+    if (!emailDelivered) {
+      logger.warn("Convite criado, mas e-mail não entregue pelo SMTP", {
+        to: normalized,
+        householdId,
+        preview: Boolean(mailResult?.preview),
+        error: mailResult?.error || null,
+        code: mailResult?.code || null,
+      });
+    }
+
     return {
       invite: HouseholdInviteDto(invite),
       // token raw só na criação (não é persistido em claro); use para montar/copiar o link
       token: raw,
       inviteUrl,
       emailDelivered,
+      emailError: emailDelivered ? null : mailResult?.error || null,
     };
   },
 

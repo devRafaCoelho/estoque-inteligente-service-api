@@ -85,8 +85,32 @@ Principais (ver `.env.example`):
 | `AI_PARSE_DAILY_LIMIT` / `AI_CHAT_DAILY_LIMIT` | Cotas diárias (0 = off) |
 | `UPLOAD_DIR` / `UPLOAD_MAX_MB` | Foto de cupom |
 | `NF_PRIORITY_STATES` / `NF_MOCK_COLLECTOR` | Collectors NF-e |
-| `SMTP_*` / `EMAIL_FROM` | E-mail real |
+| `SMTP_*` / `EMAIL_FROM` | E-mail real (sem `SMTP_HOST` = só preview em arquivo) |
 | `VAPID_*` | Web Push |
+
+### E-mail no Render (convite Hotmail etc.)
+
+O envio local e o do Render usam as **mesmas** variáveis — se o Hotmail chega no PC e não no Render, em geral falta config no painel ou o Gmail bloqueia o IP do datacenter.
+
+No serviço da API no Render, defina pelo menos:
+
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=587`
+- `SMTP_SECURE=false`
+- `SMTP_USER=` e-mail Gmail completo
+- `SMTP_PASS=` **senha de app** (não a senha normal da conta)
+- `EMAIL_FROM=` o **mesmo** endereço do `SMTP_USER`
+- `APP_URL=` URL pública do front (links do convite)
+
+No log de boot, procure:
+
+- `SMTP verificado com sucesso` → SMTP ok
+- `SMTP não configurado em produção` → vars ausentes no Render
+- `SMTP configurado, mas a verificação falhou` → senha de app / bloqueio Gmail
+
+Após o deploy, um convite sem e-mail ainda gera link (compartilhar no app). Em falha, o log mostra `Convite criado, mas e-mail não entregue pelo SMTP`.
+
+Gmail SMTP a partir de cloud (Render) é frágil para Hotmail/Outlook; se precisar de entrega estável, preferir Resend/SendGrid/Mailgun com domínio próprio.
 
 ## Domínios da API
 

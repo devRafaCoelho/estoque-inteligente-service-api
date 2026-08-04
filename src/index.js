@@ -5,6 +5,7 @@ const env = require("./config/env");
 const db = require("./config/db");
 const logger = require("./utils/logger");
 const GoogleAuthService = require("./services/GoogleAuthService");
+const EmailService = require("./services/EmailService");
 const { ensureReferenceData } = require("./bootstrap/ensureReferenceData");
 const { ensureSchemaMigrations } = require("./bootstrap/ensureSchemaMigrations");
 
@@ -20,6 +21,7 @@ async function warmUp() {
   } catch (err) {
     logger.warn("Falha ao aquecer conexão com o PostgreSQL", { error: err.message });
   }
+  await EmailService.warmUp();
   await GoogleAuthService.warmUp();
 }
 
